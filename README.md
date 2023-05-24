@@ -9,8 +9,11 @@ I have multiple things which I want to implement and the current state is defini
 # External code 
 
 The code base was started from a sample from the vulkan-hpp repository. Various smaller things were taken from the vulkan tutorial or sascha willems examples. The texture sheet was created from block textures in the faithful texture pack. 
+
 https://github.com/KhronosGroup/Vulkan-Hpp
+
 https://github.com/Overv/VulkanTutorial
+
 https://github.com/Faithful-Resource-Pack/Faithful-Java-64x
 
 
