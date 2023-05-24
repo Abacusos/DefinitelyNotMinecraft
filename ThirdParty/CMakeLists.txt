@@ -1,0 +1,5 @@
+﻿add_subdirectory("GLFW")
+add_subdirectory("stb")
+add_subdirectory("perlinNoise")
+add_subdirectory("imgui")
+add_subdirectory("optick")

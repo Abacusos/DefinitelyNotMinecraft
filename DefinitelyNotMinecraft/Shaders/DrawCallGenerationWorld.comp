@@ -1,0 +1,168 @@
+#version 460
+
+#extension GL_EXT_shader_8bit_storage: require
+
+struct DrawCall
+{
+  uint vertexCount;
+  uint instanceCount;
+  uint firstVertex;
+  uint firstInstance;
+};
+
+layout (std140, binding = 0) uniform projectionBuffer
+{
+  mat4 projection;
+};
+
+layout (std140, binding = 1) uniform viewBuffer
+{
+  mat4 view;
+};
+
+layout (std140, binding = 2) buffer transformBuffer
+{
+  mat4 transforms[];
+};
+
+layout (binding = 4) readonly buffer worldDataBuffer
+{
+  uint8_t blockTypeWorld[];
+};
+
+layout (binding = 3) buffer blockTypeBuffer
+{
+  uint8_t blockType[];
+};
+
+layout (binding = 5) buffer drawCallBuffer
+{
+    DrawCall drawcall;
+};
+
+layout (binding = 6) uniform chunkConstants
+{
+    uint chunkLoadCount;
+    uint chunkLocalSize;
+    uint chunkHeight;
+};
+
+vec3 indexToPos(uint index)
+{
+  uint localX = gl_LocalInvocationID.x % chunkLocalSize;
+  uint y = gl_WorkGroupID.x % chunkHeight;
+  uint localZ = gl_LocalInvocationID.x / chunkLocalSize;
+
+  uint chunkIndex = gl_WorkGroupID.x / chunkHeight;
+  uint chunkStartX = chunkLocalSize * (chunkIndex % chunkLoadCount);
+  uint chunkStartZ = chunkLocalSize * (chunkIndex / chunkLoadCount);
+  uint x = localX + chunkStartX;
+  uint z = localZ + chunkStartZ;
+
+  return vec3(x, y, z);
+}
+
+
+uint posToIndex(vec3 position)
+{
+  uint chunkStartX = uint(position.x) / chunkLocalSize;
+  uint chunkStartZ = uint(position.z) / chunkLocalSize; 
+
+  uint heightOffset = chunkLocalSize * chunkLocalSize * uint(position.y);
+  
+  uint sizeOfChunk = chunkLocalSize * chunkLocalSize * chunkHeight;
+  uint offsetPreviousChunk = chunkStartX * sizeOfChunk + chunkStartZ * chunkLoadCount * sizeOfChunk;
+    
+  uint inLayerOffset = (uint(position.z) % chunkLocalSize) * chunkLocalSize + (uint(position.x) % chunkLocalSize);
+
+  return offsetPreviousChunk + heightOffset + inLayerOffset;
+}
+
+
+layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+
+void main()
+{
+  uint flatIndex = gl_GlobalInvocationID.x;  
+
+  if(uint(blockTypeWorld[flatIndex]) == uint(255))
+  {
+    return;
+  }
+    
+  vec3 position = indexToPos(flatIndex);
+  
+  uint x = uint(position.x);
+  uint y = uint(position.y);
+  uint z = uint(position.z);
+
+  uint endX = x + 1;
+  uint endZ = z + 1;
+  uint endY = y + 1;
+
+  const vec4 corners[8] = vec4[8](
+    vec4(x, y, z, 1.0f),
+    vec4(endX, y, z, 1.0f),
+    vec4(x, endY, z, 1.0f),
+    vec4(endX, endY, z, 1.0f),
+    vec4(x, y, endZ, 1.0f),
+    vec4(endX, y, endZ, 1.0f),
+    vec4(x, endY, endZ, 1.0f),
+    vec4(endX, endY, endZ, 1.0f)
+    );    
+
+  mat4 pv = projection * view;
+  bool chunkVisible = false;
+  for(int i=0;i<8;++i)
+  {
+    vec4 corner = pv * corners[i];
+    bool xIsIn = -corner.w <= corner.x && corner.x <= corner.w;
+    bool yIsIn = -corner.w <= corner.y && corner.y <= corner.w;
+    bool zIsIn = 0.0f <= corner.z && corner.z <= corner.w;
+    chunkVisible = chunkVisible || (xIsIn && yIsIn && zIsIn);
+  }
+
+  if(!chunkVisible){
+    //return;
+  }
+
+  vec3 cameraPos = view[3].xyz * vec3(-1.0f, 1.0f, -1.0f) + vec3(0.0f, 128.0f, 0.0f);
+
+  uint occludingBlocks = 0;
+  for(int i=0;i<8;++i)
+  {    
+    vec3 blockPosition = corners[i].xyz;
+
+    vec3 direction = cameraPos - blockPosition;
+    float distanceToCamera = length(cameraPos - blockPosition);
+    direction = normalize(direction);
+
+    if(i > distanceToCamera)
+    {
+      break;
+    }
+    vec3 positionOtherBlock = blockPosition + direction * 1.41f;
+    if(positionOtherBlock.x < 0 || positionOtherBlock.x > chunkLoadCount * chunkLocalSize 
+        || positionOtherBlock.y < 0 || positionOtherBlock.y > chunkHeight
+        || positionOtherBlock.z < 0 || positionOtherBlock.z > chunkLoadCount * chunkLocalSize)
+    {
+        continue;
+    }
+    uint indexOther = posToIndex(positionOtherBlock);
+    if(uint(blockTypeWorld[indexOther]) != uint(255))
+    {
+        ++occludingBlocks;
+    }
+  }
+
+  if(occludingBlocks == 8){
+    //return;
+  }
+
+  uint writeIndex = atomicAdd(drawcall.instanceCount, 1u);
+
+  blockType[writeIndex] = blockTypeWorld[flatIndex];
+
+  transforms[writeIndex] = mat4(1);
+  transforms[writeIndex][3].xyzw = vec4(x, y, z, 1.0f); 
+}
