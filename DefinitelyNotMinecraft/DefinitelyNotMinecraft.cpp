@@ -17,22 +17,24 @@
 
 #include "DefinitelyNotMinecraft.hpp"
 
+#include "BlockRenderingModule.hpp"
 #include "Camera.hpp"
 #include "Chrono.hpp"
+#include "Config.hpp"
+#include "Imgui.hpp"
+#include "ImguiRenderingModule.hpp"
 #include "Input.hpp"
 #include "Renderer.hpp"
-#include "ShaderWatcher.hpp"
-#include "BlockRenderingModule.hpp"
-#include "ImguiRenderingModule.hpp"
-#include "Imgui.hpp"
-#include "Config.hpp"
+#include "ShaderManager.hpp"
+#include "StringInterner.hpp"
 #include "optick.h"
 
 int main(int /*argc*/, char** /*argv*/) {
   using namespace dnm;
   try {
     Config config;
-    ShaderWatcher watcher{};
+    StringInterner interner;
+    ShaderManager shaderManager {&interner};
     Renderer renderer{&config};
     auto* window = renderer.getGLFWwindow();
     Camera camera(&config, &renderer);
@@ -40,7 +42,8 @@ int main(int /*argc*/, char** /*argv*/) {
     Imgui imgui(&config, window);
     BlockWorld world;
 
-    BlockRenderingModule blockRenderingModule{&config, &renderer, &watcher, &world};
+    BlockRenderingModule blockRenderingModule{&config, &renderer, &shaderManager,
+                                              &world, &interner};
     ImguiRenderingModule imguiModule{&config, &renderer};
 
     auto lastFrame = std::chrono::system_clock::now();
@@ -57,14 +60,16 @@ int main(int /*argc*/, char** /*argv*/) {
 
       imgui.logicFrame(deltaTime, &camera);
 
+      shaderManager.update();
+
       auto imageIndex = renderer.prepareDrawFrame();
-      
+
       if (imageIndex == std::numeric_limits<u32>::max()) {
         continue;
       }
 
-      blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex), deltaTime,
-                       cameraMoved);
+      blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
+                                     deltaTime, cameraMoved);
       imguiModule.drawFrame(
           renderer.getFrameBuffer(imageIndex), deltaTime,
           blockRenderingModule.getRenderingFinishedSemaphore());

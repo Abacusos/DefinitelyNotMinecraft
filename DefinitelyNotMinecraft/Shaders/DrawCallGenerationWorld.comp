@@ -1,38 +1,37 @@
-#version 460
 
-#extension GL_EXT_shader_8bit_storage: require
+#extension GL_EXT_shader_8bit_storage : require
 
 struct DrawCall
 {
-  uint vertexCount;
-  uint instanceCount;
-  uint firstVertex;
-  uint firstInstance;
+      uint vertexCount;
+      uint instanceCount;
+      uint firstVertex;
+      uint firstInstance;
 };
 
 layout (std140, binding = 0) uniform projectionBuffer
 {
-  mat4 projection;
+    mat4 projection;
 };
 
 layout (std140, binding = 1) uniform viewBuffer
 {
-  mat4 view;
+    mat4 view;
 };
 
 layout (std140, binding = 2) buffer transformBuffer
 {
-  mat4 transforms[];
+    mat4 transforms[];
 };
 
 layout (binding = 4) readonly buffer worldDataBuffer
 {
-  uint8_t blockTypeWorld[];
+    uint8_t blockTypeWorld[];
 };
 
 layout (binding = 3) buffer blockTypeBuffer
 {
-  uint8_t blockType[];
+    uint8_t blockType[];
 };
 
 layout (binding = 5) buffer drawCallBuffer
@@ -47,13 +46,13 @@ layout (binding = 6) uniform chunkConstants
     uint chunkHeight;
 };
 
-vec3 indexToPos(uint index)
+vec3 indexToPos(uint workGroupID, uint localInvocationID)
 {
-  uint localX = gl_LocalInvocationID.x % chunkLocalSize;
-  uint y = gl_WorkGroupID.x % chunkHeight;
-  uint localZ = gl_LocalInvocationID.x / chunkLocalSize;
+  uint localX = localInvocationID % chunkLocalSize;
+  uint y = workGroupID % chunkHeight;
+  uint localZ = localInvocationID / chunkLocalSize;
 
-  uint chunkIndex = gl_WorkGroupID.x / chunkHeight;
+  uint chunkIndex = workGroupID / chunkHeight;
   uint chunkStartX = chunkLocalSize * (chunkIndex % chunkLoadCount);
   uint chunkStartZ = chunkLocalSize * (chunkIndex / chunkLoadCount);
   uint x = localX + chunkStartX;
@@ -79,7 +78,7 @@ uint posToIndex(vec3 position)
 }
 
 
-layout (local_size_x = 256, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
 
 void main()
 {
@@ -90,7 +89,7 @@ void main()
     return;
   }
     
-  vec3 position = indexToPos(flatIndex);
+  vec3 position = indexToPos(gl_WorkGroupID.x, gl_LocalInvocationID.x);
   
   uint x = uint(position.x);
   uint y = uint(position.y);
@@ -100,6 +99,7 @@ void main()
   uint endZ = z + 1;
   uint endY = y + 1;
 
+  // A naive version of frustum culling
   const vec4 corners[8] = vec4[8](
     vec4(x, y, z, 1.0f),
     vec4(endX, y, z, 1.0f),
@@ -123,11 +123,12 @@ void main()
   }
 
   if(!chunkVisible){
-    //return;
+    return;
   }
 
-  vec3 cameraPos = view[3].xyz * vec3(-1.0f, 1.0f, -1.0f) + vec3(0.0f, 128.0f, 0.0f);
+  vec3 cameraPos = view[3].xyz * vec3(-1.0f, 1.0f, -1.0f);
 
+  // An experiment about occlusion culling. It may not work and still require the projection
   uint occludingBlocks = 0;
   for(int i=0;i<8;++i)
   {    
@@ -154,8 +155,9 @@ void main()
         ++occludingBlocks;
     }
   }
-
+   
   if(occludingBlocks == 8){
+    // Disabled due to bugs
     //return;
   }
 

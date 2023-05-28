@@ -6,7 +6,8 @@
 #include <stb_image.h>
 
 #include "GLMInclude.hpp"
-#include "ShaderWatcher.hpp"
+#include "ShaderManager.hpp"
+#include "StringInterner.hpp"
 #include "optick.h"
 
 namespace dnm {
@@ -75,36 +76,39 @@ constexpr std::string_view fragmentShader = "Shaders/World.frag";
 constexpr std::string_view computeShader =
     "Shaders/DrawCallGenerationWorld.comp";
 
+constexpr std::string_view localWGSizeX = "LOCAL_SIZE_X";
+
 }  // namespace
 
 BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
-                                           ShaderWatcher* watcher,
-                                           BlockWorld* blockWorld)
+                                           ShaderManager* shaderManager,
+                                           BlockWorld* blockWorld,
+                                           StringInterner* interner)
     : m_config{config},
       m_renderer{renderer},
-      m_watcher{watcher},
-      m_blockWorld{blockWorld} {
+      m_shaderManager{shaderManager},
+      m_blockWorld{blockWorld},
+      m_interner{interner} {
   const auto& physicalDevice = m_renderer->getPhysicalDevice();
   const auto& device = m_renderer->getDevice();
 
-  m_vertexShaderModule =
-      Shader{device, vk::ShaderStageFlagBits::eVertex, vertexShader};
-  m_watcher->registerShader(&m_vertexShaderModule, vertexShader);
-  m_fragmentShaderModule =
-      Shader{device, vk::ShaderStageFlagBits::eFragment, fragmentShader};
-  m_watcher->registerShader(&m_fragmentShaderModule, fragmentShader);
-
-  m_drawCallGenerationComputeModule =
-      Shader{device, vk::ShaderStageFlagBits::eCompute, computeShader};
-  m_watcher->registerShader(&m_drawCallGenerationComputeModule, computeShader);
+  m_vertexHandle = m_shaderManager->registerShaderFile(
+      m_interner->addOrGetString(vertexShader),
+      vk::ShaderStageFlagBits::eVertex);
+  m_fragmentHandle = m_shaderManager->registerShaderFile(
+      m_interner->addOrGetString(fragmentShader),
+      vk::ShaderStageFlagBits::eFragment);
+  m_computeHandle = m_shaderManager->registerShaderFile(
+      m_interner->addOrGetString(computeShader),
+      vk::ShaderStageFlagBits::eCompute);
 
   int texWidth, texHeight, texChannels;
   stbi_uc* pixels = stbi_load("Textures/TextureSheet.png", &texWidth,
                               &texHeight, &texChannels, STBI_rgb_alpha);
 
-  u32 mipLevels = static_cast<u32>(
-                      std::floor(std::log2(std::max(texWidth, texHeight)))) +
-                  1;
+  u32 mipLevels =
+      static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) +
+      1;
 
   m_textureData =
       TextureData(physicalDevice, device, vk::Extent2D(texWidth, texHeight),
@@ -232,7 +236,7 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   m_renderingFinished = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
   registerDebugMarker(device, m_renderingFinished, "Block rendering finished");
 
-  recompileShadersIfNecessary();
+  recompileShadersIfNecessary(true);
 }
 
 void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
@@ -240,9 +244,7 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
   OPTICK_EVENT();
   const auto& device = m_renderer->getDevice();
 
-  if (!recompileShadersIfNecessary()) {
-    return;
-  }
+  recompileShadersIfNecessary();
 
   auto extent = m_renderer->getExtent();
   bool submitCompute = m_blockWorld->wasModified() || cameraMoved || true;
@@ -386,16 +388,15 @@ void BlockRenderingModule::recreatePipeline() {
   m_descriptorSet = std::move(sets.front());
 
   m_graphicsPipeline = makeGraphicsPipeline(
-      m_config, device, m_renderer->getPipelineCache(),
-      m_vertexShaderModule.m_module, nullptr, m_fragmentShaderModule.m_module,
-      nullptr, sizeof(texturedCubeData[0]),
+      m_config, device, m_renderer->getPipelineCache(), m_vertexShaderModule,
+      nullptr, m_fragmentShaderModule, nullptr, sizeof(texturedCubeData[0]),
       {{vk::Format::eR32G32B32Sfloat, 0}, {vk::Format::eR32G32Sfloat, 12}},
       vk::FrontFace::eCounterClockwise, true, m_pipelineLayout,
       m_renderer->getRenderPass());
 
   m_computePipeline = makeComputePipeline(
-      device, m_renderer->getPipelineCache(),
-      m_drawCallGenerationComputeModule.m_module, nullptr, m_pipelineLayout);
+      device, m_renderer->getPipelineCache(), m_drawCallGenerationComputeModule,
+      nullptr, m_pipelineLayout);
 
   const auto* projectionClipBuffer =
       m_renderer->getGlobalBuffer(GlobalBuffers::ProjectionClip);
@@ -439,29 +440,38 @@ void BlockRenderingModule::recreatePipeline() {
   updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
 }
 
-bool BlockRenderingModule::recompileShadersIfNecessary() {
+void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
   const auto& device = m_renderer->getDevice();
 
-  if (m_vertexShaderModule.m_dirty.load() ||
-      m_fragmentShaderModule.m_dirty.load() ||
-      m_drawCallGenerationComputeModule.m_dirty.load()) {
-    bool allSuccessfulCompiled = true;
-    allSuccessfulCompiled &= m_vertexShaderModule.recompile(device);
-    allSuccessfulCompiled &= m_fragmentShaderModule.recompile(device);
-    allSuccessfulCompiled &=
-        m_drawCallGenerationComputeModule.recompile(device);
-    if (allSuccessfulCompiled) {
-      recreatePipeline();
-      std::cout
-          << "Succesfully recompiled shaders and recreated the pipeline.\n";
-    } else {
-      std::cerr << "Failed to recompile shaders, pipeline not recreated.\n";
+  bool anyUpdated = false;
+
+  auto processShader = [this, &device, &anyUpdated, &force](
+                           ShaderHandle handle,
+                           vk::raii::ShaderModule& shaderModule, 
+      std::span<ShaderManager::Define> defines = {}) {
+    if (m_shaderManager->wasContentUpdated(handle) || force) {
+      auto recompiledVertexShader =
+          m_shaderManager->getCompiledVersion(device, handle, defines);
+      if (recompiledVertexShader) {
+        anyUpdated = true;
+        shaderModule = std::move(recompiledVertexShader.value());
+      }
     }
-    m_vertexShaderModule.m_dirty.store(false);
-    m_fragmentShaderModule.m_dirty.store(false);
-    m_drawCallGenerationComputeModule.m_dirty.store(false);
-    return allSuccessfulCompiled;
+  };
+
+    std::array defines = {
+      ShaderManager::Define{m_interner->addOrGetString(localWGSizeX),
+                            std::to_string(m_blockWorld->chunkLocalSize *
+                                           m_blockWorld->chunkLocalSize)}};
+
+  processShader(m_vertexHandle, m_vertexShaderModule);
+  processShader(m_fragmentHandle, m_fragmentShaderModule);
+  processShader(m_computeHandle, m_drawCallGenerationComputeModule, defines);
+
+  if (anyUpdated) {
+    recreatePipeline();
+    std::cout << "Succesfully recompiled shaders and recreated the pipeline "
+                 "for the block rendering module.\n";
   }
-  return true;
 }
 }  // namespace dnm

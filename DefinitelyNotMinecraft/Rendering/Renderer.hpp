@@ -6,7 +6,6 @@
 #include "Chrono.hpp"
 #include "GlobalBuffers.hpp"
 #include "RAIIUtils.hpp"
-#include "Shaders.hpp"
 #include "GLMInclude.hpp"
 #include "Config.hpp"
 

@@ -1,7 +1,7 @@
 ﻿# Add source to this project's executable.
-add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp"  "Rendering/Shaders.cpp" "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"  "Rendering/ShaderWatcher.cpp" "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "Logic/Imgui.cpp")
+add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp"   "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
 
-set(FOLDERS "Core" "Logic" "Rendering" "RenderingModule")
+set(FOLDERS "Core" "Logic" "Rendering" "RenderingModule" "Shader")
 foreach(Folder IN LISTS FOLDERS)
     target_include_directories(DefinitelyNotMinecraft PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${Folder})
 endforeach()

@@ -1,4 +1,3 @@
-#version 460
 
 #extension GL_EXT_shader_8bit_storage: require
 

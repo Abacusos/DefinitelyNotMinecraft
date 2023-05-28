@@ -5,8 +5,6 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
 #include "RAIIUtils.hpp"
-#include "ShaderWatcher.hpp"
-#include "Shaders.hpp"
 #include "ShortTypes.hpp"
 #include "glslang/SPIRV/GlslangToSpv.h"
 #include "optick.h"

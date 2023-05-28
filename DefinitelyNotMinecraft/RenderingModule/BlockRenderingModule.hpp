@@ -1,16 +1,20 @@
 #pragma once
 
 #include "BlockWorld.hpp"
-#include "Renderer.hpp"
-#include "ShaderWatcher.hpp"
 #include "Config.hpp"
+#include "Renderer.hpp"
+#include "Handle.hpp"
 
 namespace dnm {
 
+class ShaderManager;
+class StringInterner;
+
 class BlockRenderingModule {
  public:
-  explicit BlockRenderingModule(Config* config, Renderer* renderer, ShaderWatcher* watcher,
-                                BlockWorld* blockWorld);
+  explicit BlockRenderingModule(Config* config, Renderer* renderer,
+                                ShaderManager* manager, BlockWorld* blockWorld,
+                                StringInterner* interner);
 
   void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
                  bool cameraMoved);
@@ -19,17 +23,22 @@ class BlockRenderingModule {
 
  private:
   void recreatePipeline();
-  bool recompileShadersIfNecessary();
+  void recompileShadersIfNecessary(bool force = false);
 
  private:
   Config* m_config;
   Renderer* m_renderer;
-  ShaderWatcher* m_watcher;
+  ShaderManager* m_shaderManager;
   BlockWorld* m_blockWorld;
+  StringInterner* m_interner;
 
-  dnm::Shader m_vertexShaderModule{nullptr};
-  dnm::Shader m_fragmentShaderModule{nullptr};
-  dnm::Shader m_drawCallGenerationComputeModule{nullptr};
+  ShaderHandle m_vertexHandle;
+  ShaderHandle m_fragmentHandle;
+  ShaderHandle m_computeHandle;
+
+  vk::raii::ShaderModule m_vertexShaderModule{nullptr};
+  vk::raii::ShaderModule m_fragmentShaderModule{nullptr};
+  vk::raii::ShaderModule m_drawCallGenerationComputeModule{nullptr};
 
   dnm::BufferData m_vertexBuffer{nullptr};
   dnm::BufferData m_transformBuffer{nullptr};
