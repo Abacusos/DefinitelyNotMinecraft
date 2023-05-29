@@ -276,9 +276,7 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
   {
     std::array<vk::ClearValue, 2> clearValues;
     clearValues[0].color = vk::ClearColorValue(0.2f, 0.2f, 0.2f, 0.2f);
-    clearValues[1].depthStencil = m_config->useInverseDepth
-                                      ? vk::ClearDepthStencilValue(0.0f, 0)
-                                      : vk::ClearDepthStencilValue(1.0f, 0);
+    clearValues[1].depthStencil = vk::ClearDepthStencilValue(0.0f, 0);
 
     const auto& pass = m_renderer->getRenderPass();
     vk::RenderPassBeginInfo renderPassBeginInfo(
@@ -447,8 +445,8 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
 
   auto processShader = [this, &device, &anyUpdated, &force](
                            ShaderHandle handle,
-                           vk::raii::ShaderModule& shaderModule, 
-      std::span<ShaderManager::Define> defines = {}) {
+                           vk::raii::ShaderModule& shaderModule,
+                           std::span<ShaderManager::Define> defines = {}) {
     if (m_shaderManager->wasContentUpdated(handle) || force) {
       auto recompiledVertexShader =
           m_shaderManager->getCompiledVersion(device, handle, defines);
@@ -459,7 +457,7 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
     }
   };
 
-    std::array defines = {
+  std::array defines = {
       ShaderManager::Define{m_interner->addOrGetString(localWGSizeX),
                             std::to_string(m_blockWorld->chunkLocalSize *
                                            m_blockWorld->chunkLocalSize)}};

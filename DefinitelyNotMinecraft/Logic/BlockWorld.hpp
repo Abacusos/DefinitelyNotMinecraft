@@ -16,9 +16,9 @@ class BlockWorld {
   std::span<const BlockType> getBlockTypes() const;
   bool wasModified();
 
-  constexpr static u64 chunkLoadCount = 2;
-  constexpr static u64 chunkLocalSize = 4;
-  constexpr static u64 chunkHeight = 4;
+  constexpr static u64 chunkLoadCount = 16;
+  constexpr static u64 chunkLocalSize = 16;
+  constexpr static u64 chunkHeight = 128;
   constexpr static u64 totalBlockCount =
       (chunkLocalSize * chunkLocalSize * chunkHeight) * chunkLoadCount *
       chunkLoadCount;

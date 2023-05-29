@@ -9,6 +9,7 @@ layout (std140, binding = 0) uniform projectionBuffer
 layout (std140, binding = 1) uniform viewBuffer
 {
   mat4 view;
+  vec4 cameraPos;
 };
 
 layout (std140, binding = 2) readonly buffer transformBuffer

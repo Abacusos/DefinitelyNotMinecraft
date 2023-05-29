@@ -21,23 +21,22 @@ class Camera {
 
   bool update(TimeSpan deltaTime);
 
-  glm::vec3 getRotation() const { return rotation; }
-  glm::vec3 getPosition() const { return viewPosition; }
+  glm::vec3 getRotation() const { return m_rotation; }
+  glm::vec3 getPosition() const { return m_position; }
 
  private:
   Config* m_config;
-  glm::vec3 position = glm::vec3(0.0f, 0.0f, 0.0f);
-  glm::vec3 rotation = glm::vec3(0.0f, 135.0f, 0.0f);
-  glm::vec4 viewPosition = glm::vec4();
+  glm::vec3 m_position = glm::vec3(0.0f, 140.0f, 0.0f);
+  glm::vec3 m_rotation = glm::vec3(30.0f, 30.0f, 0.0f);
 
-  float rotationSpeed = 0.001f;
-  float movementSpeed = 0.01f;
+  float m_rotationSpeed = 0.001f;
+  float m_movementSpeed = 0.01f;
 
-  glm::mat4 view;
-
-  bool dirty = true;
-  float accumulatedXChange = 0.0f;
-  float accumulatedYChange = 0.0f;
+  bool m_dirty = true;
+  float m_accumulatedXChange = 0.0f;
+  float m_accumulatedYChange = 0.0f;
+  float m_forward = 0.0f;
+  float m_side = 0.0f;
 
   BufferData m_viewBuffer{nullptr};
   std::unique_ptr<BufferRegistration> m_viewBufferRegistration{nullptr};

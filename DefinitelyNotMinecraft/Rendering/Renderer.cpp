@@ -122,8 +122,8 @@ void Renderer::finishDrawFrame(vk::raii::Semaphore& finishedRendering,
   vk::PresentInfoKHR presentInfoKHR(nullptr, *m_swapChainData.swapChain,
                                     imageIndex);
 
-// Optick does not use the pointer, so just use void
-		OPTICK_GPU_FLIP(nullptr);
+  // Optick does not use the pointer, so just use void
+  OPTICK_GPU_FLIP(nullptr);
   vk::Result result = m_presentQueue.presentKHR(presentInfoKHR);
   switch (result) {
     case vk::Result::eSuccess:
@@ -135,10 +135,6 @@ void Renderer::finishDrawFrame(vk::raii::Semaphore& finishedRendering,
       break;
     default:
       assert(false);  // an unexpected result is returned !
-  }
-  if (m_config->recreateSwapChain) {
-    recreateSwapChain();
-    m_config->recreateSwapChain = false;
   }
 }
 
@@ -261,10 +257,9 @@ void Renderer::recreateSwapChain() {
       makeFramebuffers(m_device, m_renderPass, m_swapChainData.imageViews,
                        &m_depthBufferData.imageView, m_surfaceData.extent);
 
-  // TODO The near and far are swapped here, this should not be the case. Needs fixing 
-  std::array<glm::mat4x4, 1u> matrices{createProjectionMatrix(
-      m_surfaceData.extent, m_config->useInverseDepth ? 0.1f : 250.0f,
-      m_config->useInverseDepth ? 250.0f : 0.1f)};
+  // TODO The near and far are swapped here, not sure if this is correct
+  std::array<glm::mat4x4, 1u> matrices{
+      createProjectionMatrix(m_surfaceData.extent, 250.01f, 0.01f)};
   copyToDevice(m_projection.deviceMemory,
                std::span<const glm::mat4x4>(matrices));
 }
@@ -277,28 +272,15 @@ glm::mat4x4 Renderer::createProjectionMatrix(const vk::Extent2D& extent,
   constexpr float fov_rad = 45.0f * 2.0f * glm::pi<float>() / 360.0f;
   float focal_length = 1.0f / std::tan(fov_rad / 2.0f);
 
-  const auto h = focal_length;
-  const auto w = h / aspect;
-  const auto a = f / (n - f);
-  const auto b = (n * f) / (n - f);
+  float x = focal_length / aspect;
+  float y = -focal_length;
+  const auto a = n / (f - n);
+  const auto b = f * a;
 
   glm::mat4x4 projection{
-      w,    0.0f, 0.0f, 0.0f, 
-      0.0f, -h,    0.0f, 0.0f,
-      0.0f, 0.0f, a,    -1.0f,   
-      0.0f, 0.0f, b, 0.0f,
+      x,    0.0f, 0.0f, 0.0f,  0.0f, y,    0.0f, 0.0f,
+      0.0f, 0.0f, a,    -1.0f, 0.0f, 0.0f, b,    0.0f,
   };
-
-    if (m_config->useInverseDepth) {
-    const auto a2 = -n / (f - n);
-    const auto b2 = (n * f) / (f - n);
-    projection = {
-        w,    0.0f, 0.0f, 0.0f,
-        0.0f, -h,   0.0f, 0.0f,
-        0.0f, 0.0f, a2,    1.0f, 
-        0.0f, 0.0f, b2,    0.0f,
-    };
-  }
 
   return projection;
 }

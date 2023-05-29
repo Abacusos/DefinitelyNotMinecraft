@@ -41,9 +41,6 @@ void Imgui::logicFrame(TimeSpan dt, Camera* camera) {
   ImGui::Text("Camera rotation %.1f %.1f %.1f", rotation.x, rotation.y,
               rotation.z);
 
-  ImGui::Checkbox("Use Inverse Depth (broken)", &m_config->useInverseDepth);
-  ImGui::Checkbox("FlipY", &m_config->flipY);
-  ImGui::Checkbox("Recreate SwapChain", &m_config->recreateSwapChain);
   ImGui::End();
 }
 }  // namespace dnm

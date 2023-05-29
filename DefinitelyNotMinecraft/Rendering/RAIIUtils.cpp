@@ -388,7 +388,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
                                     vk::CompareOp::eAlways);
   vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
       vk::PipelineDepthStencilStateCreateFlags(), depthBuffered, depthBuffered,
-      config->useInverseDepth ? vk::CompareOp::eGreaterOrEqual : vk::CompareOp::eLessOrEqual, false, false, stencilOpState, stencilOpState2);
+      vk::CompareOp::eGreaterOrEqual, false, false, stencilOpState, stencilOpState2);
 
   vk::ColorComponentFlags colorComponentFlags(
       vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |

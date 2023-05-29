@@ -26,10 +26,9 @@ ImguiRenderingModule::ImguiRenderingModule(Config* config, Renderer* renderer)
 
   m_descriptorPool = makeDescriptorPool(device, sizes);
 
-  m_renderPass = makeRenderPass(
-      device, renderer->getColorFormat(),
-       vk::Format::eD32Sfloat,
-      vk::AttachmentLoadOp::eLoad);
+  m_renderPass =
+      makeRenderPass(device, renderer->getColorFormat(), vk::Format::eD32Sfloat,
+                     vk::AttachmentLoadOp::eLoad);
 
   ImGui_ImplVulkan_InitInfo init_info = {};
   init_info.Instance = *renderer->getInstance();
@@ -68,6 +67,7 @@ void ImguiRenderingModule::drawFrame(
     m_commandBuffer.reset();
     std::array<vk::ClearValue, 2> clearValues;
     clearValues[0].color = vk::ClearColorValue(0.45f, 0.55f, 0.60f, 0.2f);
+    clearValues[1].depthStencil = vk::ClearDepthStencilValue(0.0f, 0);
 
     vk::RenderPassBeginInfo renderPassBeginInfo(
         *m_renderPass, *frameBuffer, vk::Rect2D(vk::Offset2D(0, 0), extent),

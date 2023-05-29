@@ -17,6 +17,7 @@ layout (std140, binding = 0) uniform projectionBuffer
 layout (std140, binding = 1) uniform viewBuffer
 {
     mat4 view;
+    vec4 cameraPos;
 };
 
 layout (std140, binding = 2) buffer transformBuffer
@@ -64,6 +65,10 @@ vec3 indexToPos(uint workGroupID, uint localInvocationID)
 
 uint posToIndex(vec3 position)
 {
+  position.x = clamp(position.x, 0.0f, float(chunkLoadCount * chunkLocalSize));
+  position.y = clamp(position.y, 0.0f, float(chunkHeight));
+  position.z = clamp(position.z, 0.0f, float(chunkLoadCount * chunkLocalSize));
+
   uint chunkStartX = uint(position.x) / chunkLocalSize;
   uint chunkStartZ = uint(position.z) / chunkLocalSize; 
 
@@ -120,22 +125,28 @@ void main()
     bool yIsIn = -corner.w <= corner.y && corner.y <= corner.w;
     bool zIsIn = 0.0f <= corner.z && corner.z <= corner.w;
     chunkVisible = chunkVisible || (xIsIn && yIsIn && zIsIn);
-  }
+  } 
 
-  if(!chunkVisible){
+  if(!chunkVisible)
+  {
     return;
   }
 
-  vec3 cameraPos = view[3].xyz * vec3(-1.0f, 1.0f, -1.0f);
+  float distanceToCamera = length(cameraPos.xyz - position);
 
-  // An experiment about occlusion culling. It may not work and still require the projection
+  if(distanceToCamera > 256.0f)
+  {
+    return;
+  }
+
+    // An experiment about occlusion culling. It may not work and still require the projection
   uint occludingBlocks = 0;
   for(int i=0;i<8;++i)
   {    
     vec3 blockPosition = corners[i].xyz;
 
-    vec3 direction = cameraPos - blockPosition;
-    float distanceToCamera = length(cameraPos - blockPosition);
+    vec3 direction = cameraPos.xyz - blockPosition;
+    float distanceToCamera = length(cameraPos.xyz - blockPosition);
     direction = normalize(direction);
 
     if(i > distanceToCamera)
@@ -150,15 +161,14 @@ void main()
         continue;
     }
     uint indexOther = posToIndex(positionOtherBlock);
-    if(uint(blockTypeWorld[indexOther]) != uint(255))
+    if(indexOther != flatIndex && uint(blockTypeWorld[indexOther]) != uint(255))
     {
         ++occludingBlocks;
     }
   }
    
   if(occludingBlocks == 8){
-    // Disabled due to bugs
-    //return;
+    return;
   }
 
   uint writeIndex = atomicAdd(drawcall.instanceCount, 1u);

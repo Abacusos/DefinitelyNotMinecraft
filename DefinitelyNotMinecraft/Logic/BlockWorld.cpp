@@ -5,7 +5,6 @@
 namespace dnm {
 
 BlockWorld::BlockWorld() {
-
   siv::BasicPerlinNoise<float> noiseGrass(42);
   siv::BasicPerlinNoise<float> noiseCobble(84);
   siv::BasicPerlinNoise<float> noiseStone(126);
@@ -46,7 +45,7 @@ BlockWorld::BlockWorld() {
   m_blockTypesWorld.resize(totalBlockCount);
   for (auto chunkZ = 0u; chunkZ < chunkLoadCount; ++chunkZ) {
     for (auto chunkX = 0u; chunkX < chunkLoadCount; ++chunkX) {
-      for (i64 localChunkY = chunkHeight-1; localChunkY >= 0;  --localChunkY) {
+      for (i64 localChunkY = chunkHeight - 1; localChunkY >= 0; --localChunkY) {
         for (auto localChunkZ = 0u; localChunkZ < chunkLocalSize;
              ++localChunkZ) {
           for (auto localChunkX = 0u; localChunkX < chunkLocalSize;
@@ -63,7 +62,7 @@ BlockWorld::BlockWorld() {
             auto inLayerOffset = localChunkZ * chunkLocalSize + localChunkX;
 
             bool blockAboveExists = false;
-            if (localChunkY != chunkHeight-1) {
+            if (localChunkY != chunkHeight - 1) {
               auto heightOffsetAbove =
                   chunkLocalSize * chunkLocalSize * (localChunkY + 1);
               blockAboveExists =
