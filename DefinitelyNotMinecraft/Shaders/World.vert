@@ -14,7 +14,7 @@ layout (std140, binding = 1) uniform viewBuffer
 
 layout (std140, binding = 2) readonly buffer transformBuffer
 {
-  mat4 transforms[];
+  vec4 transforms[];
 };
 
 layout (binding = 3) readonly buffer blockTypeBuffer
@@ -31,5 +31,7 @@ void main()
 {
   outTexCoord = inTexCoord;
   outTexCoord.y += uint(blockType[gl_InstanceIndex]) * 0.083333f;
-  gl_Position = (projection * view * transforms[gl_InstanceIndex]) * vec4(pos, 1.0f);
+  mat4 modelMatrix = mat4(1);
+  modelMatrix[3].xyzw = transforms[gl_InstanceIndex]; 
+  gl_Position = (projection * view * modelMatrix) * vec4(pos, 1.0f);
 }

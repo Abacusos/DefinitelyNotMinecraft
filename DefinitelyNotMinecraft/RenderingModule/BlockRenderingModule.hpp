@@ -2,8 +2,8 @@
 
 #include "BlockWorld.hpp"
 #include "Config.hpp"
-#include "Renderer.hpp"
 #include "Handle.hpp"
+#include "Renderer.hpp"
 
 namespace dnm {
 
@@ -17,13 +17,15 @@ class BlockRenderingModule {
                                 StringInterner* interner);
 
   void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
-                 bool cameraMoved);
+                 bool cameraMoved, glm::vec3 cameraPosition);
 
   vk::raii::Semaphore& getRenderingFinishedSemaphore();
 
  private:
   void recreatePipeline();
   void recompileShadersIfNecessary(bool force = false);
+
+  void recreateBlockDependentBuffers();
 
  private:
   Config* m_config;
@@ -46,6 +48,7 @@ class BlockRenderingModule {
   dnm::BufferData m_worldDataBuffer{nullptr};
   dnm::BufferData m_blockTypeBuffer{nullptr};
   dnm::BufferData m_chunkConstantsBuffer{nullptr};
+  dnm::BufferData m_chunkRemapIndex{nullptr};
   dnm::TextureData m_textureData{nullptr};
 
   vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
@@ -61,5 +64,9 @@ class BlockRenderingModule {
   vk::raii::CommandBuffer m_commandBuffer{nullptr};
   vk::raii::Semaphore m_drawCallGenerationFinished{nullptr};
   vk::raii::Semaphore m_renderingFinished{nullptr};
+
+  u32 loadCountChunksLastFrame = 0u;
+  glm::ivec2 m_cameraChunkLastFrame{-10000, -10000};
+  bool m_allChunksUploadedLastFrame = false;
 };
 }  // namespace dnm

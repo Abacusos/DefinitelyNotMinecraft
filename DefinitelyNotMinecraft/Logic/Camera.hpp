@@ -26,7 +26,8 @@ class Camera {
 
  private:
   Config* m_config;
-  glm::vec3 m_position = glm::vec3(0.0f, 140.0f, 0.0f);
+  // Moving the camera away from 0 0 to not show the problems with world generation into negative direction
+  glm::vec3 m_position = glm::vec3(500.0f, 140.0f, 500.0f);
   glm::vec3 m_rotation = glm::vec3(30.0f, 30.0f, 0.0f);
 
   float m_rotationSpeed = 0.001f;

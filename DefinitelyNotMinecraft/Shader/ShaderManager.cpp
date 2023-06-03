@@ -80,6 +80,19 @@ bool GLSLtoSPV(std::string_view glslShader, vk::ShaderStageFlagBits stageFlag,
   EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules);
 
   if (!shader.parse(GetDefaultResources(), 100, false, messages)) {
+    u32 index = 0u;
+    u32 lineBreak = 0u;
+    u32 lineCount = 1u;
+    while (index < glslShader.size()) {
+      lineBreak = glslShader.find_first_of("\n", index);
+      if (lineBreak == glslShader.npos) {
+        break;
+      }
+      std::cerr << lineCount++ << ": "
+                << glslShader.substr(index, lineBreak - index) << std::endl;
+      index = lineBreak+1;
+    }
+
     std::cerr << shader.getInfoLog() << std::endl;
 
     if (auto* debugLog = shader.getInfoDebugLog(); debugLog) {

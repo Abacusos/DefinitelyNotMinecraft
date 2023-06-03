@@ -70,6 +70,7 @@ template <typename T>
 void copyToDevice(vk::raii::DeviceMemory const& deviceMemory,
                   std::span<const T> data, vk::DeviceSize stride = sizeof(T)) {
   auto count = data.size();
+  assert(count > 0);
   assert(sizeof(T) <= stride);
   uint8_t* deviceData =
       static_cast<uint8_t*>(deviceMemory.mapMemory(0, count * stride));

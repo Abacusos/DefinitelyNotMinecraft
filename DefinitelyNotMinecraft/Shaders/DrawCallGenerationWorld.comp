@@ -22,7 +22,7 @@ layout (std140, binding = 1) uniform viewBuffer
 
 layout (std140, binding = 2) buffer transformBuffer
 {
-    mat4 transforms[];
+    vec4 transforms[];
 };
 
 layout (binding = 4) readonly buffer worldDataBuffer
@@ -42,67 +42,66 @@ layout (binding = 5) buffer drawCallBuffer
 
 layout (binding = 6) uniform chunkConstants
 {
-    uint chunkLoadCount;
-    uint chunkLocalSize;
-    uint chunkHeight;
+    int chunkLoadCount;
+    int chunksOneDimension;
+    int chunkLocalSize;
+    int chunkHeight;
 };
 
-vec3 indexToPos(uint workGroupID, uint localInvocationID)
+layout (binding = 7) buffer chunkIndexRemap
 {
-  uint localX = localInvocationID % chunkLocalSize;
-  uint y = workGroupID % chunkHeight;
-  uint localZ = localInvocationID / chunkLocalSize;
+    uint remapIndex[];
+};
 
-  uint chunkIndex = workGroupID / chunkHeight;
-  uint chunkStartX = chunkLocalSize * (chunkIndex % chunkLoadCount);
-  uint chunkStartZ = chunkLocalSize * (chunkIndex / chunkLoadCount);
-  uint x = localX + chunkStartX;
-  uint z = localZ + chunkStartZ;
+vec3 indexToPos()
+{
+  int remap = int(remapIndex[gl_WorkGroupID.x]);
+  int remapOffsetX = (remap % chunksOneDimension) - chunkLoadCount;
+  int remapOffsetZ = (remap / chunksOneDimension) - chunkLoadCount;
+  int chunkStartX = int(chunkLocalSize * (remapOffsetX + int(cameraPos.x / chunkLocalSize)));
+  int chunkStartZ = int(chunkLocalSize * (remapOffsetZ + int(cameraPos.z / chunkLocalSize)));
+  int x = int(gl_LocalInvocationID.x) + chunkStartX;
+  int z = int(gl_LocalInvocationID.z) + chunkStartZ;
 
-  return vec3(x, y, z);
+  return vec3(x, gl_WorkGroupID.y, z);
 }
 
-
-uint posToIndex(vec3 position)
+uint toFlatIndex()
 {
-  position.x = clamp(position.x, 0.0f, float(chunkLoadCount * chunkLocalSize));
-  position.y = clamp(position.y, 0.0f, float(chunkHeight));
-  position.z = clamp(position.z, 0.0f, float(chunkLoadCount * chunkLocalSize));
-
-  uint chunkStartX = uint(position.x) / chunkLocalSize;
-  uint chunkStartZ = uint(position.z) / chunkLocalSize; 
-
-  uint heightOffset = chunkLocalSize * chunkLocalSize * uint(position.y);
+  int remap = int(remapIndex[gl_WorkGroupID.x]);
+  int chunkStartX = (remap % chunksOneDimension);
+  int chunkStartZ = (remap / chunksOneDimension);
   
-  uint sizeOfChunk = chunkLocalSize * chunkLocalSize * chunkHeight;
-  uint offsetPreviousChunk = chunkStartX * sizeOfChunk + chunkStartZ * chunkLoadCount * sizeOfChunk;
-    
-  uint inLayerOffset = (uint(position.z) % chunkLocalSize) * chunkLocalSize + (uint(position.x) % chunkLocalSize);
+  int heightOffset = chunkLocalSize * chunkLocalSize * int(gl_WorkGroupID.y);
+  
+  int sizeOfChunk = chunkLocalSize * chunkLocalSize * chunkHeight;
+  int offsetPreviousChunk = chunkStartX * sizeOfChunk + chunkStartZ * chunksOneDimension * sizeOfChunk;
+   
+  int inLayerOffset = (int(gl_LocalInvocationID.z) % chunkLocalSize) * chunkLocalSize + (int(gl_LocalInvocationID.x) % chunkLocalSize);
 
   return offsetPreviousChunk + heightOffset + inLayerOffset;
 }
 
-
-layout (local_size_x = LOCAL_SIZE_X, local_size_y = 1, local_size_z = 1) in;
+layout (local_size_x = LOCAL_SIZE_X, local_size_y = LOCAL_SIZE_Y, local_size_z = LOCAL_SIZE_Z) in;
 
 void main()
 {
-  uint flatIndex = gl_GlobalInvocationID.x;  
+  uint blockIndex = toFlatIndex();
 
-  if(uint(blockTypeWorld[flatIndex]) == uint(255))
+  if(uint(blockTypeWorld[blockIndex]) == uint(255))
   {
     return;
   }
-    
-  vec3 position = indexToPos(gl_WorkGroupID.x, gl_LocalInvocationID.x);
   
-  uint x = uint(position.x);
-  uint y = uint(position.y);
-  uint z = uint(position.z);
+  vec3 position = indexToPos();
 
-  uint endX = x + 1;
-  uint endZ = z + 1;
-  uint endY = y + 1;
+  int x = int(position.x);
+  int y = int(position.y);
+  int z = int(position.z);
+
+  int endX = x + 1;
+  int endZ = z + 1;
+  int endY = y + 1;
 
   // A naive version of frustum culling
   const vec4 corners[8] = vec4[8](
@@ -132,49 +131,9 @@ void main()
     return;
   }
 
-  float distanceToCamera = length(cameraPos.xyz - position);
-
-  if(distanceToCamera > 256.0f)
-  {
-    return;
-  }
-
-    // An experiment about occlusion culling. It may not work and still require the projection
-  uint occludingBlocks = 0;
-  for(int i=0;i<8;++i)
-  {    
-    vec3 blockPosition = corners[i].xyz;
-
-    vec3 direction = cameraPos.xyz - blockPosition;
-    float distanceToCamera = length(cameraPos.xyz - blockPosition);
-    direction = normalize(direction);
-
-    if(i > distanceToCamera)
-    {
-      break;
-    }
-    vec3 positionOtherBlock = blockPosition + direction * 1.41f;
-    if(positionOtherBlock.x < 0 || positionOtherBlock.x > chunkLoadCount * chunkLocalSize 
-        || positionOtherBlock.y < 0 || positionOtherBlock.y > chunkHeight
-        || positionOtherBlock.z < 0 || positionOtherBlock.z > chunkLoadCount * chunkLocalSize)
-    {
-        continue;
-    }
-    uint indexOther = posToIndex(positionOtherBlock);
-    if(indexOther != flatIndex && uint(blockTypeWorld[indexOther]) != uint(255))
-    {
-        ++occludingBlocks;
-    }
-  }
-   
-  if(occludingBlocks == 8){
-    return;
-  }
-
   uint writeIndex = atomicAdd(drawcall.instanceCount, 1u);
 
-  blockType[writeIndex] = blockTypeWorld[flatIndex];
+  blockType[writeIndex] = blockTypeWorld[blockIndex];
 
-  transforms[writeIndex] = mat4(1);
-  transforms[writeIndex][3].xyzw = vec4(x, y, z, 1.0f); 
+  transforms[writeIndex] = vec4(x, y, z, 1.0f); 
 }

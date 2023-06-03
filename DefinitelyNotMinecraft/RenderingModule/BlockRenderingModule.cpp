@@ -77,6 +77,8 @@ constexpr std::string_view computeShader =
     "Shaders/DrawCallGenerationWorld.comp";
 
 constexpr std::string_view localWGSizeX = "LOCAL_SIZE_X";
+constexpr std::string_view localWGSizeY = "LOCAL_SIZE_Y";
+constexpr std::string_view localWGSizeZ = "LOCAL_SIZE_Z";
 
 }  // namespace
 
@@ -106,9 +108,10 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   stbi_uc* pixels = stbi_load("Textures/TextureSheet.png", &texWidth,
                               &texHeight, &texChannels, STBI_rgb_alpha);
 
+  // Preventing the last few mipmaps due to artifacts in the distance where the colors are mixed to gray then
   u32 mipLevels =
-      static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) +
-      1;
+      static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) -
+      3;
 
   m_textureData =
       TextureData(physicalDevice, device, vk::Extent2D(texWidth, texHeight),
@@ -200,30 +203,7 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
                      vk::BufferUsageFlagBits::eIndirectBuffer);
   registerDebugMarker(device, m_drawCommandBuffer.buffer, "Drawcommand Buffer");
 
-  m_transformBuffer = m_renderer->createBuffer(
-      BlockWorld::totalBlockCount * sizeof(glm::mat4x4),
-      vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer");
-
-  m_worldDataBuffer = m_renderer->createBuffer(
-      BlockWorld::totalBlockCount * sizeof(u8),
-      vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks");
-
-  m_blockTypeBuffer = m_renderer->createBuffer(
-      BlockWorld::totalBlockCount * sizeof(u8),
-      vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command");
-
-  copyToDevice(m_worldDataBuffer.deviceMemory,
-               std::span<const u8>(m_blockWorld->getBlockTypes()));
-
-  m_chunkConstantsBuffer = m_renderer->createBuffer(
-      3 * sizeof(u32), vk::BufferUsageFlagBits::eUniformBuffer,
-      "Chunk Constants");
-
-  std::array<u32, 3u> constants{BlockWorld::chunkLoadCount,
-                                BlockWorld::chunkLocalSize,
-                                BlockWorld::chunkHeight};
-  copyToDevice(m_chunkConstantsBuffer.deviceMemory,
-               std::span<const u32>(constants));
+  recreateBlockDependentBuffers();
 
   m_commandBufferCompute = m_renderer->getCommandBuffer();
   m_commandBuffer = m_renderer->getCommandBuffer();
@@ -240,14 +220,69 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
 }
 
 void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
-                                     TimeSpan dt, bool cameraMoved) {
+                                     TimeSpan dt, bool cameraMoved,
+                                     glm::vec3 cameraPosition) {
   OPTICK_EVENT();
   const auto& device = m_renderer->getDevice();
 
   recompileShadersIfNecessary();
 
+  if (loadCountChunksLastFrame != m_config->loadCountChunks) {
+    recreateBlockDependentBuffers();
+    recreatePipeline();
+  }
+
+  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+  u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
+
+  glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
+                         cameraPosition.z / BlockWorld::chunkLocalSize};
+  bool requiresChunkDataUpdate =
+      cameraChunk != m_cameraChunkLastFrame || !m_allChunksUploadedLastFrame;
+  if (requiresChunkDataUpdate) {
+    m_allChunksUploadedLastFrame = true;
+    m_cameraChunkLastFrame = cameraChunk;
+
+    std::vector<u32> remapIndex;
+    remapIndex.reserve(workGroupCount);
+    std::vector<BlockType> blockData(
+        BlockWorld::perChunkBlockCount * workGroupCount, u8(255));
+
+    glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
+                   cameraChunk.y - m_config->loadCountChunks};
+    glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
+                   cameraChunk.y + m_config->loadCountChunks};
+
+    u32 counter = 0u;
+    for (i32 z = min.y; z <= max.y; ++z) {
+      for (i32 x = min.x; x <= max.x; ++x) {
+        glm::ivec2 chunk{x, z};
+        auto state = m_blockWorld->requestChunk(chunk);
+        if (state != BlockWorld::ChunkState::Finished) {
+          m_allChunksUploadedLastFrame = false;        
+            ++counter;
+          continue;
+        }
+        remapIndex.emplace_back(counter);
+        auto data = m_blockWorld->getChunkData(chunk);
+        std::copy(data.begin(), data.end(),
+                  blockData.begin() + counter * BlockWorld::perChunkBlockCount);
+        ++counter;
+      }
+    }
+
+    copyToDevice(m_worldDataBuffer.deviceMemory,
+                 std::span<const BlockType>(blockData));
+    workGroupCount = remapIndex.size();
+    if (workGroupCount > 0) {
+      copyToDevice(m_chunkRemapIndex.deviceMemory,
+                   std::span<const u32>(remapIndex));
+    }
+  }
+
   auto extent = m_renderer->getExtent();
-  bool submitCompute = m_blockWorld->wasModified() || cameraMoved || true;
+  bool submitCompute = m_config->everyFrameGenerateDrawCalls || cameraMoved ||
+                       requiresChunkDataUpdate;
   if (submitCompute) {
     std::array<const u32, 4> empty{36u, 0u, 0u, 0u};
     copyToDevice<u32>(m_drawCommandBuffer.deviceMemory, std::span(empty));
@@ -261,10 +296,7 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
     m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
                                               *m_pipelineLayout, 0u,
                                               {*m_descriptorSet}, nullptr);
-    m_commandBufferCompute.dispatch(BlockWorld::chunkHeight *
-                                        BlockWorld::chunkLoadCount *
-                                        BlockWorld::chunkLoadCount,
-                                    1, 1);
+    m_commandBufferCompute.dispatch(workGroupCount, BlockWorld::chunkHeight, 1);
     m_commandBufferCompute.end();
 
     auto computeQueue = m_renderer->getComputeQueue();
@@ -328,7 +360,7 @@ vk::raii::Semaphore& BlockRenderingModule::getRenderingFinishedSemaphore() {
 void BlockRenderingModule::recreatePipeline() {
   m_renderer->waitIdle();
 
-  std::array<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>, 8>
+  std::array<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>, 9>
       layout{
 
           // projection
@@ -363,13 +395,18 @@ void BlockRenderingModule::recreatePipeline() {
           std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
               vk::DescriptorType::eUniformBuffer, 1u,
               vk::ShaderStageFlagBits::eCompute},
+          // remap index
+          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+              vk::DescriptorType::eStorageBuffer, 1u,
+              vk::ShaderStageFlagBits::eCompute},
+          // texture sampler
           std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
               vk::DescriptorType::eCombinedImageSampler, 1,
               vk::ShaderStageFlagBits::eFragment}};
 
   std::array<vk::DescriptorPoolSize, 3u> sizes{
       vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 3u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 4u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 5u},
       vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1u}};
 
   const auto& device = m_renderer->getDevice();
@@ -405,7 +442,7 @@ void BlockRenderingModule::recreatePipeline() {
 
   std::array<std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
                         vk::DeviceSize, const vk::raii::BufferView*>,
-             7u>
+             8u>
       update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
                         vk::DeviceSize, const vk::raii::BufferView*>{
                  vk::DescriptorType::eUniformBuffer, *projectionClipBuffer,
@@ -433,13 +470,19 @@ void BlockRenderingModule::recreatePipeline() {
              std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
                         vk::DeviceSize, const vk::raii::BufferView*>{
                  vk::DescriptorType::eUniformBuffer,
-                 m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr}};
+                 m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                        vk::DeviceSize, const vk::raii::BufferView*>{
+                 vk::DescriptorType::eStorageBuffer, m_chunkRemapIndex.buffer,
+                 VK_WHOLE_SIZE, nullptr}};
 
   updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
 }
 
 void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
   const auto& device = m_renderer->getDevice();
+  auto& physicalDevice = m_renderer->getPhysicalDevice();
+  auto prop = physicalDevice.getProperties();
 
   bool anyUpdated = false;
 
@@ -459,8 +502,11 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
 
   std::array defines = {
       ShaderManager::Define{m_interner->addOrGetString(localWGSizeX),
-                            std::to_string(m_blockWorld->chunkLocalSize *
-                                           m_blockWorld->chunkLocalSize)}};
+                            std::to_string(m_blockWorld->chunkLocalSize)},
+      ShaderManager::Define{m_interner->addOrGetString(localWGSizeY),
+                            std::to_string(1)},
+      ShaderManager::Define{m_interner->addOrGetString(localWGSizeZ),
+                            std::to_string(m_blockWorld->chunkLocalSize)}};
 
   processShader(m_vertexHandle, m_vertexShaderModule);
   processShader(m_fragmentHandle, m_fragmentShaderModule);
@@ -471,5 +517,39 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
     std::cout << "Succesfully recompiled shaders and recreated the pipeline "
                  "for the block rendering module.\n";
   }
+}
+void BlockRenderingModule::recreateBlockDependentBuffers() {
+  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+  u32 blockCountAllLoadedChunks = BlockWorld::perChunkBlockCount *
+                                  oneDimensionChunkCount *
+                                  oneDimensionChunkCount;
+
+  m_transformBuffer = m_renderer->createBuffer(
+      blockCountAllLoadedChunks * sizeof(glm::vec4),
+      vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer");
+
+  m_worldDataBuffer = m_renderer->createBuffer(
+      blockCountAllLoadedChunks * sizeof(u8),
+      vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks");
+
+  m_blockTypeBuffer = m_renderer->createBuffer(
+      blockCountAllLoadedChunks * sizeof(u8),
+      vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command");
+
+    std::array<u32, 4u> constants{
+      m_config->loadCountChunks, oneDimensionChunkCount,
+      BlockWorld::chunkLocalSize, BlockWorld::chunkHeight};
+
+  m_chunkConstantsBuffer = m_renderer->createBuffer(
+        sizeof(constants), vk::BufferUsageFlagBits::eUniformBuffer,
+      "Chunk Constants");
+
+  copyToDevice(m_chunkConstantsBuffer.deviceMemory,
+               std::span<const u32>(constants));
+
+  m_chunkRemapIndex = m_renderer->createBuffer(
+      oneDimensionChunkCount * oneDimensionChunkCount * sizeof(u32),
+      vk::BufferUsageFlagBits::eStorageBuffer, "Chunk Remap Index");
+  loadCountChunksLastFrame = m_config->loadCountChunks;
 }
 }  // namespace dnm
