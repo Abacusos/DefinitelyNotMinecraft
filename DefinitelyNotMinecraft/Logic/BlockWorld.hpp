@@ -21,8 +21,8 @@ class BlockWorld {
   ChunkState requestChunk(glm::ivec2 chunkPosition);
   std::span<const BlockType> getChunkData(glm::ivec2 chunkPosition) const;
 
-  constexpr static u64 chunkLocalSize = 16;
-  constexpr static u64 chunkHeight = 128;
+  constexpr static u64 chunkLocalSize = 32u;
+  constexpr static u64 chunkHeight = 128u;
   constexpr static u64 perChunkBlockCount =
       (chunkLocalSize * chunkLocalSize * chunkHeight);
 

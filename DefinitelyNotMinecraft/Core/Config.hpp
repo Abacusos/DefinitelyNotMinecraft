@@ -6,6 +6,6 @@ namespace dnm {
 
 struct Config {
   bool everyFrameGenerateDrawCalls = false;
-  u32 loadCountChunks = 8u;
+  u32 loadCountChunks = 4u;
 };
 }  // namespace dnm

@@ -182,8 +182,10 @@ vk::raii::CommandBuffer Renderer::getCommandBuffer() {
 
 BufferData Renderer::createBuffer(vk::DeviceSize size,
                                   vk::BufferUsageFlags flags,
-                                  std::string_view debugName) {
-  auto result = BufferData(m_physicalDevice, m_device, size, flags);
+                                  std::string_view debugName,
+                                  vk::MemoryPropertyFlags propertyFlags) {
+  auto result =
+      BufferData(m_physicalDevice, m_device, size, flags, propertyFlags);
   registerDebugMarker(m_device, result.buffer, debugName);
   return result;
 }

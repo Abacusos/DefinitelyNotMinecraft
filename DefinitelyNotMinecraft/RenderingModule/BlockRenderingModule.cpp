@@ -526,15 +526,20 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
 
   m_transformBuffer = m_renderer->createBuffer(
       blockCountAllLoadedChunks * sizeof(glm::vec4),
-      vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer");
+      vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer",
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
 
   m_worldDataBuffer = m_renderer->createBuffer(
       blockCountAllLoadedChunks * sizeof(u8),
-      vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks");
+      vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks",
+      vk::MemoryPropertyFlagBits::eDeviceLocal |
+          vk::MemoryPropertyFlagBits::eHostVisible |
+          vk::MemoryPropertyFlagBits::eHostCoherent);
 
   m_blockTypeBuffer = m_renderer->createBuffer(
       blockCountAllLoadedChunks * sizeof(u8),
-      vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command");
+      vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command",
+      vk::MemoryPropertyFlagBits::eDeviceLocal);
 
     std::array<u32, 4u> constants{
       m_config->loadCountChunks, oneDimensionChunkCount,
@@ -542,7 +547,9 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
 
   m_chunkConstantsBuffer = m_renderer->createBuffer(
         sizeof(constants), vk::BufferUsageFlagBits::eUniformBuffer,
-      "Chunk Constants");
+        "Chunk Constants",
+        vk::MemoryPropertyFlagBits::eDeviceLocal |
+            vk::MemoryPropertyFlagBits::eHostVisible);
 
   copyToDevice(m_chunkConstantsBuffer.deviceMemory,
                std::span<const u32>(constants));

@@ -44,7 +44,10 @@ class Renderer {
 
   vk::raii::CommandBuffer getCommandBuffer();
   dnm::BufferData createBuffer(vk::DeviceSize size, vk::BufferUsageFlags flags,
-                               std::string_view debugName);
+                               std::string_view debugName,
+                               vk::MemoryPropertyFlags propertyFlags =
+                                   vk::MemoryPropertyFlagBits::eHostVisible |
+                                   vk::MemoryPropertyFlagBits::eHostCoherent);
 
   std::unique_ptr<dnm::BufferRegistration> registerRAIIBuffer(
       GlobalBuffers bufferIdentifier, const BufferData& buffer);
