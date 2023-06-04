@@ -25,12 +25,12 @@ layout (std140, binding = 2) buffer transformBuffer
     vec4 transforms[];
 };
 
-layout (binding = 4) readonly buffer worldDataBuffer
+layout (std430, binding = 4) readonly buffer worldDataBuffer
 {
     uint8_t blockTypeWorld[];
 };
 
-layout (binding = 3) buffer blockTypeBuffer
+layout (std430, binding = 3) buffer blockTypeBuffer
 {
     uint8_t blockType[];
 };
@@ -84,11 +84,14 @@ uint toFlatIndex()
 
 layout (local_size_x = LOCAL_SIZE_X, local_size_y = LOCAL_SIZE_Y, local_size_z = LOCAL_SIZE_Z) in;
 
+uint highestBitSet = uint(128);
+
 void main()
 {
   uint blockIndex = toFlatIndex();
 
-  if(uint(blockTypeWorld[blockIndex]) == uint(255))
+  uint block = uint(blockTypeWorld[blockIndex]);
+  if(block == uint(255) || (block & uint(128)) != 0u)
   {
     return;
   }
@@ -131,9 +134,9 @@ void main()
     return;
   }
 
-  uint writeIndex = atomicAdd(drawcall.instanceCount, 1u);
+  uint localWriteIndex = atomicAdd(drawcall.instanceCount, 1u);
 
-  blockType[writeIndex] = blockTypeWorld[blockIndex];
+  blockType[localWriteIndex] = uint8_t(block);
 
-  transforms[writeIndex] = vec4(x, y, z, 1.0f); 
+  transforms[localWriteIndex] = vec4(x, y, z, 1.0f); 
 }

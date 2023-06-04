@@ -17,7 +17,7 @@ layout (std140, binding = 2) readonly buffer transformBuffer
   vec4 transforms[];
 };
 
-layout (binding = 3) readonly buffer blockTypeBuffer
+layout (std430, binding = 3) readonly buffer blockTypeBuffer
 {
   uint8_t blockType[];
 };

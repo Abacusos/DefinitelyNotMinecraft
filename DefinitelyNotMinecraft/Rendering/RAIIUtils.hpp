@@ -564,15 +564,6 @@ std::vector<char const*> gatherLayers(
 #endif
 );
 
-#if defined(NDEBUG)
-vk::StructureChain<vk::InstanceCreateInfo>
-#else
-vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT>
-#endif
-makeInstanceCreateInfoChain(vk::ApplicationInfo const& applicationInfo,
-                            std::vector<char const*> const& layers,
-                            std::vector<char const*> const& extensions);
-
 vk::raii::Image makeImage(vk::raii::Device const& device);
 
 vk::raii::Instance makeInstance(vk::raii::Context const& context,

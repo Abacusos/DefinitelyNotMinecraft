@@ -90,7 +90,7 @@ bool GLSLtoSPV(std::string_view glslShader, vk::ShaderStageFlagBits stageFlag,
       }
       std::cerr << lineCount++ << ": "
                 << glslShader.substr(index, lineBreak - index) << std::endl;
-      index = lineBreak+1;
+      index = lineBreak + 1;
     }
 
     std::cerr << shader.getInfoLog() << std::endl;
@@ -117,7 +117,11 @@ bool GLSLtoSPV(std::string_view glslShader, vk::ShaderStageFlagBits stageFlag,
     return false;
   }
 
-  glslang::GlslangToSpv(*program.getIntermediate(stage), spvShader);
+  glslang::SpvOptions options;
+#if !defined(NDEBUG)
+  options.generateDebugInfo = true;
+#endif
+  glslang::GlslangToSpv(*program.getIntermediate(stage), spvShader, &options);
   return true;
 }
 

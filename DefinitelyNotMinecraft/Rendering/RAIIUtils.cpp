@@ -323,8 +323,7 @@ std::vector<vk::raii::Framebuffer> dnm::makeFramebuffers(
 }
 
 vk::raii::Pipeline dnm::makeGraphicsPipeline(
-    const Config* config,
-    vk::raii::Device const& device,
+    const Config* config, vk::raii::Device const& device,
     vk::raii::PipelineCache const& pipelineCache,
     vk::raii::ShaderModule const& vertexShaderModule,
     vk::SpecializationInfo const* vertexShaderSpecializationInfo,
@@ -384,11 +383,12 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
                                     vk::StencilOp::eKeep,
                                     vk::CompareOp::eNever);
   vk::StencilOpState stencilOpState2(vk::StencilOp::eKeep, vk::StencilOp::eKeep,
-                                    vk::StencilOp::eKeep,
-                                    vk::CompareOp::eAlways);
+                                     vk::StencilOp::eKeep,
+                                     vk::CompareOp::eAlways);
   vk::PipelineDepthStencilStateCreateInfo pipelineDepthStencilStateCreateInfo(
       vk::PipelineDepthStencilStateCreateFlags(), depthBuffered, depthBuffered,
-      vk::CompareOp::eGreaterOrEqual, false, false, stencilOpState, stencilOpState2);
+      vk::CompareOp::eGreaterOrEqual, false, false, stencilOpState,
+      stencilOpState2);
 
   vk::ColorComponentFlags colorComponentFlags(
       vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
@@ -449,16 +449,32 @@ vk::raii::Instance dnm::makeInstance(vk::raii::Context const& context,
 #endif
       );
 #if defined(NDEBUG)
-  vk::StructureChain<vk::InstanceCreateInfo>
+  // in non-debug mode just use the InstanceCreateInfo for instance creation
+  vk::StructureChain<vk::InstanceCreateInfo> instanceCreateInfo(
+      {{}, &applicationInfo, enabledLayers, enabledExtensions});
 #else
+  // in debug mode, addionally use the debugUtilsMessengerCallback in instance
+  // creation!
+  vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
+      vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
+      vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
+  vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
+      vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
+      vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
+      vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
+
   vk::StructureChain<vk::InstanceCreateInfo,
                      vk::DebugUtilsMessengerCreateInfoEXT>
+      instanceCreateInfo(
+          {{}, &applicationInfo, enabledLayers, enabledExtensions},
+          {{},
+           severityFlags,
+           messageTypeFlags,
+           &dnm::debugUtilsMessengerCallback});
 #endif
-      instanceCreateInfoChain = dnm::makeInstanceCreateInfoChain(
-          applicationInfo, enabledLayers, enabledExtensions);
 
-  return vk::raii::Instance(
-      context, instanceCreateInfoChain.get<vk::InstanceCreateInfo>());
+  return vk::raii::Instance(context,
+                            instanceCreateInfo.get<vk::InstanceCreateInfo>());
 }
 
 vk::raii::RenderPass dnm::makeRenderPass(vk::raii::Device const& device,
@@ -509,39 +525,6 @@ vk::raii::RenderPass dnm::makeRenderPass(vk::raii::Device const& device,
                                                 attachmentDescriptions,
                                                 subpassDescription, dependency);
   return vk::raii::RenderPass(device, renderPassCreateInfo);
-}
-
-#if defined(NDEBUG)
-vk::StructureChain<vk::InstanceCreateInfo>
-#else
-vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT>
-#endif
-dnm::makeInstanceCreateInfoChain(vk::ApplicationInfo const& applicationInfo,
-                                 std::vector<char const*> const& layers,
-                                 std::vector<char const*> const& extensions) {
-#if defined(NDEBUG)
-  // in non-debug mode just use the InstanceCreateInfo for instance creation
-  vk::StructureChain<vk::InstanceCreateInfo> instanceCreateInfo(
-      {{}, &applicationInfo, layers, extensions});
-#else
-  // in debug mode, addionally use the debugUtilsMessengerCallback in instance
-  // creation!
-  vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(
-      vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning |
-      vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
-  vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
-      vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
-      vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
-      vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
-  vk::StructureChain<vk::InstanceCreateInfo,
-                     vk::DebugUtilsMessengerCreateInfoEXT>
-      instanceCreateInfo({{}, &applicationInfo, layers, extensions},
-                         {{},
-                          severityFlags,
-                          messageTypeFlags,
-                          &dnm::debugUtilsMessengerCallback});
-#endif
-  return instanceCreateInfo;
 }
 
 vk::Format dnm::pickDepthFormat(
