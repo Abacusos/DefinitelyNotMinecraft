@@ -12,7 +12,7 @@ class Camera {
 
   enum class CameraMovement { FORWARD, BACKWARD, LEFT, RIGHT };
 
-  Camera(Config* config, Renderer* renderer);
+  explicit Camera(Config* config, Renderer* renderer);
 
   void processKeyboard(CameraMovement direction, TimeSpan deltaTime);
 

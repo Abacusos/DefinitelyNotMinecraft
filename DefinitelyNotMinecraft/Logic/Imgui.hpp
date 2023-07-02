@@ -10,7 +10,7 @@ class Camera;
 
 class Imgui {
  public:
-  Imgui(Config* config, GLFWwindow* window);
+  explicit Imgui(Config* config, GLFWwindow* window);
   ~Imgui();
 
   void logicFrame(TimeSpan dt, Camera* camera);

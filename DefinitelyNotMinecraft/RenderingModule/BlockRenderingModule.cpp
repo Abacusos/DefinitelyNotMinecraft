@@ -108,7 +108,8 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   stbi_uc* pixels = stbi_load("Textures/TextureSheet.png", &texWidth,
                               &texHeight, &texChannels, STBI_rgb_alpha);
 
-  // Preventing the last few mipmaps due to artifacts in the distance where the colors are mixed to gray then
+  // Preventing the last few mipmaps due to artifacts in the distance where the
+  // colors are mixed to gray then
   u32 mipLevels =
       static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) -
       3;
@@ -235,50 +236,7 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
   u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
   u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
 
-  glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
-                         cameraPosition.z / BlockWorld::chunkLocalSize};
-  bool requiresChunkDataUpdate =
-      cameraChunk != m_cameraChunkLastFrame || !m_allChunksUploadedLastFrame;
-  if (requiresChunkDataUpdate) {
-    m_allChunksUploadedLastFrame = true;
-    m_cameraChunkLastFrame = cameraChunk;
-
-    std::vector<u32> remapIndex;
-    remapIndex.reserve(workGroupCount);
-    std::vector<BlockType> blockData(
-        BlockWorld::perChunkBlockCount * workGroupCount, u8(255));
-
-    glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
-                   cameraChunk.y - m_config->loadCountChunks};
-    glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
-                   cameraChunk.y + m_config->loadCountChunks};
-
-    u32 counter = 0u;
-    for (i32 z = min.y; z <= max.y; ++z) {
-      for (i32 x = min.x; x <= max.x; ++x) {
-        glm::ivec2 chunk{x, z};
-        auto state = m_blockWorld->requestChunk(chunk);
-        if (state != BlockWorld::ChunkState::Finished) {
-          m_allChunksUploadedLastFrame = false;        
-            ++counter;
-          continue;
-        }
-        remapIndex.emplace_back(counter);
-        auto data = m_blockWorld->getChunkData(chunk);
-        std::copy(data.begin(), data.end(),
-                  blockData.begin() + counter * BlockWorld::perChunkBlockCount);
-        ++counter;
-      }
-    }
-
-    copyToDevice(m_worldDataBuffer.deviceMemory,
-                 std::span<const BlockType>(blockData));
-    workGroupCount = remapIndex.size();
-    if (workGroupCount > 0) {
-      copyToDevice(m_chunkRemapIndex.deviceMemory,
-                   std::span<const u32>(remapIndex));
-    }
-  }
+  bool requiresChunkDataUpdate = updateBlockWorldData(cameraPosition);
 
   auto extent = m_renderer->getExtent();
   bool submitCompute = m_config->everyFrameGenerateDrawCalls || cameraMoved ||
@@ -541,15 +499,15 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
       vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
-    std::array<u32, 4u> constants{
+  std::array<u32, 4u> constants{
       m_config->loadCountChunks, oneDimensionChunkCount,
       BlockWorld::chunkLocalSize, BlockWorld::chunkHeight};
 
   m_chunkConstantsBuffer = m_renderer->createBuffer(
-        sizeof(constants), vk::BufferUsageFlagBits::eUniformBuffer,
-        "Chunk Constants",
-        vk::MemoryPropertyFlagBits::eDeviceLocal |
-            vk::MemoryPropertyFlagBits::eHostVisible);
+      sizeof(constants), vk::BufferUsageFlagBits::eUniformBuffer,
+      "Chunk Constants",
+      vk::MemoryPropertyFlagBits::eDeviceLocal |
+          vk::MemoryPropertyFlagBits::eHostVisible);
 
   copyToDevice(m_chunkConstantsBuffer.deviceMemory,
                std::span<const u32>(constants));
@@ -558,5 +516,69 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
       oneDimensionChunkCount * oneDimensionChunkCount * sizeof(u32),
       vk::BufferUsageFlagBits::eStorageBuffer, "Chunk Remap Index");
   loadCountChunksLastFrame = m_config->loadCountChunks;
+}
+bool BlockRenderingModule::updateBlockWorldData(glm::vec3 cameraPosition) {
+  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+  u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
+
+  glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
+                         cameraPosition.z / BlockWorld::chunkLocalSize};
+
+  glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
+                 cameraChunk.y - m_config->loadCountChunks};
+  glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
+                 cameraChunk.y + m_config->loadCountChunks};
+
+  bool chunkDirty = false;
+  for (i32 z = min.y; z <= max.y; ++z) {
+    for (i32 x = min.x; x <= max.x; ++x) {
+      glm::ivec2 chunk{x, z};
+      if (m_blockWorld->isRenderingDirty(chunk)) {
+        chunkDirty = true;
+        m_blockWorld->clearRenderingDirty(chunk);
+      }
+    }
+  }
+
+  bool requiresChunkDataUpdate = cameraChunk != m_cameraChunkLastFrame ||
+                                 !m_allChunksUploadedLastFrame || chunkDirty;
+
+  if (requiresChunkDataUpdate) {
+    m_allChunksUploadedLastFrame = true;
+    m_cameraChunkLastFrame = cameraChunk;
+
+    std::vector<u32> remapIndex;
+    remapIndex.reserve(workGroupCount);
+    std::vector<BlockType> blockData(
+        BlockWorld::perChunkBlockCount * workGroupCount, BlockWorld::air);
+
+    u32 counter = 0u;
+    for (i32 z = min.y; z <= max.y; ++z) {
+      for (i32 x = min.x; x <= max.x; ++x) {
+        glm::ivec2 chunk{x, z};
+        auto state = m_blockWorld->requestChunk(chunk);
+        if (state != BlockWorld::ChunkState::FinishedGeneration) {
+          m_allChunksUploadedLastFrame = false;
+          ++counter;
+          continue;
+        }
+        remapIndex.emplace_back(counter);
+        auto data = m_blockWorld->getChunkData(chunk);
+        std::copy(data.begin(), data.end(),
+                  blockData.begin() + counter * BlockWorld::perChunkBlockCount);
+        ++counter;
+      }
+    }
+
+    copyToDevice(m_worldDataBuffer.deviceMemory,
+                 std::span<const BlockType>(blockData));
+    workGroupCount = remapIndex.size();
+    if (workGroupCount > 0) {
+      copyToDevice(m_chunkRemapIndex.deviceMemory,
+                   std::span<const u32>(remapIndex));
+    }
+  }
+
+  return requiresChunkDataUpdate;
 }
 }  // namespace dnm

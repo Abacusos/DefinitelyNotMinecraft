@@ -1,6 +1,7 @@
 #include "Camera.hpp"
 
 #include <iostream>
+
 namespace dnm {
 
 namespace {

@@ -21,9 +21,9 @@ int main(int /*argc*/, char** /*argv*/) {
     Renderer renderer{&config};
     auto* window = renderer.getGLFWwindow();
     Camera camera(&config, &renderer);
-    Input input(&camera, window);
+    BlockWorld world{&config};
+    Input input(&camera, window, &world);
     Imgui imgui(&config, window);
-    BlockWorld world;
 
     BlockRenderingModule blockRenderingModule{&config, &renderer, &shaderManager,
                                               &world, &interner};

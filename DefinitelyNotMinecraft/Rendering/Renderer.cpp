@@ -261,7 +261,7 @@ void Renderer::recreateSwapChain() {
 
   // TODO The near and far are swapped here, not sure if this is correct
   std::array<glm::mat4x4, 1u> matrices{
-      createProjectionMatrix(m_surfaceData.extent, 250.01f, 0.01f)};
+      createProjectionMatrix(m_surfaceData.extent, m_config->farPlane, 0.01f)};
   copyToDevice(m_projection.deviceMemory,
                std::span<const glm::mat4x4>(matrices));
 }

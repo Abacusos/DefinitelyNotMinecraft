@@ -7,5 +7,6 @@ namespace dnm {
 struct Config {
   bool everyFrameGenerateDrawCalls = false;
   u32 loadCountChunks = 4u;
+  float farPlane = 250.0f;
 };
 }  // namespace dnm

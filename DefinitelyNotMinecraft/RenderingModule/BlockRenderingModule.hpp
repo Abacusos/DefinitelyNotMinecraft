@@ -26,6 +26,7 @@ class BlockRenderingModule {
   void recompileShadersIfNecessary(bool force = false);
 
   void recreateBlockDependentBuffers();
+  bool updateBlockWorldData(glm::vec3 cameraPosition);
 
  private:
   Config* m_config;
