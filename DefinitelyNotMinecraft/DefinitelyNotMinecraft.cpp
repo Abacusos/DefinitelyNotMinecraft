@@ -4,6 +4,7 @@
 #include "Camera.hpp"
 #include "Chrono.hpp"
 #include "Config.hpp"
+#include "GizmoRenderingModule.hpp"
 #include "Imgui.hpp"
 #include "ImguiRenderingModule.hpp"
 #include "Input.hpp"
@@ -17,17 +18,20 @@ int main(int /*argc*/, char** /*argv*/) {
   try {
     Config config;
     StringInterner interner;
-    ShaderManager shaderManager {&interner};
+    ShaderManager shaderManager{&interner};
     Renderer renderer{&config};
     auto* window = renderer.getGLFWwindow();
     Camera camera(&config, &renderer);
     BlockWorld world{&config};
-    Input input(&camera, window, &world);
     Imgui imgui(&config, window);
 
-    BlockRenderingModule blockRenderingModule{&config, &renderer, &shaderManager,
-                                              &world, &interner};
+    BlockRenderingModule blockRenderingModule{
+        &config, &renderer, &shaderManager, &world, &interner};
     ImguiRenderingModule imguiModule{&config, &renderer};
+    GizmoRenderingModule gizmoRenderingModule{
+        &config, &renderer, &shaderManager, &world, &interner};
+    
+    Input input(&camera, window, &world, &config, &gizmoRenderingModule);
 
     auto lastFrame = std::chrono::system_clock::now();
 
@@ -52,13 +56,17 @@ int main(int /*argc*/, char** /*argv*/) {
       }
 
       blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
-                                     deltaTime, cameraMoved, camera.getPosition());
+                                     deltaTime, cameraMoved,
+                                     camera.getPosition());
       imguiModule.drawFrame(
           renderer.getFrameBuffer(imageIndex), deltaTime,
           blockRenderingModule.getRenderingFinishedSemaphore());
+      gizmoRenderingModule.drawFrame(
+          renderer.getFrameBuffer(imageIndex), deltaTime,
+          imguiModule.getRenderingFinishedSemaphore());
 
-      renderer.finishDrawFrame(imguiModule.getRenderingFinishedSemaphore(),
-                               imageIndex);
+      renderer.finishDrawFrame(
+          gizmoRenderingModule.getRenderingFinishedSemaphore(), imageIndex);
     }
 
     renderer.waitIdle();

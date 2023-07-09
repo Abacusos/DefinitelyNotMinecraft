@@ -13,6 +13,7 @@ constexpr u8 highestBit = u8(1) << 7;
 BlockWorld::BlockWorld(Config* config) : m_config{config} {}
 
 BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
+  std::lock_guard g{m_chunkDataMutex};
   auto& chunk = m_chunkData[chunkPosition];
 
   switch (chunk.state) {
@@ -121,6 +122,7 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
 }
 
 bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
+  std::lock_guard g{m_chunkDataMutex};
   auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     return false;
@@ -130,6 +132,7 @@ bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
 }
 
 void BlockWorld::clearRenderingDirty(glm::ivec2 chunkPosition) {
+  std::lock_guard g{m_chunkDataMutex};
   auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     assert(false);
@@ -142,6 +145,7 @@ void BlockWorld::clearRenderingDirty(glm::ivec2 chunkPosition) {
 
 std::span<const BlockType> BlockWorld::getChunkData(
     glm::ivec2 chunkPosition) const {
+  std::lock_guard g{m_chunkDataMutex};
   auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     assert(false);
@@ -151,21 +155,43 @@ std::span<const BlockType> BlockWorld::getChunkData(
   return it->second.data;
 }
 
-void BlockWorld::modifyFirstTracedBlock(glm::vec3 position, glm::vec3 rotation,
-                                        BlockAction action) {
+void BlockWorld::modifyFirstTracedBlock(
+    const std::optional<BlockWorld::BlockPosition>& potentialTarget) {
+  auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
+  switch (action) {
+    case BlockAction::Add: {
+      if (potentialTarget) {
+        updateBlock(potentialTarget.value(), 1);
+      }
+    } break;
+
+    case BlockAction::Destroy: {
+      if (potentialTarget && potentialTarget->blockExists) {
+        updateBlock(potentialTarget.value(), BlockWorld::air);
+        break;
+      }
+
+    } break;
+    default:
+      assert(false);
+  }
+}
+
+std::optional<BlockWorld::BlockPosition> BlockWorld::getFirstTracedBlock(
+    glm::vec3 position, glm::vec3 rotation) {
   glm::vec3 direction;
   direction.x = cos(glm::radians(rotation.y)) * cos(glm::radians(rotation.x));
   direction.y = -sin(glm::radians(rotation.x));
   direction.z = sin(glm::radians(rotation.y)) * cos(glm::radians(rotation.x));
   glm::vec3 cameraFront = glm::normalize(direction);
 
+  std::optional<BlockPosition> potentialTarget;
+  auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
   switch (action) {
     case BlockAction::Add: {
-      std::optional<BlockPosition> potentialTarget;
       for (auto i = 0u; i < m_config->farPlane; ++i) {
         auto marchedPosition = position + (cameraFront * float(i));
-        if (auto result = getBlockPosition(marchedPosition);
-            result) {
+        if (auto result = getBlockPosition(marchedPosition); result) {
           if (result->blockExists) {
             // We need to break in both cases because either a previous block
             // along the marched line was already selected (and thus stored in
@@ -175,9 +201,6 @@ void BlockWorld::modifyFirstTracedBlock(glm::vec3 position, glm::vec3 rotation,
           potentialTarget = result;
         }
       }
-      if (potentialTarget) {
-        updateBlock(potentialTarget.value(), 1);
-      }
     } break;
 
     case BlockAction::Destroy: {
@@ -185,7 +208,7 @@ void BlockWorld::modifyFirstTracedBlock(glm::vec3 position, glm::vec3 rotation,
         if (auto result = getBlockPosition(position + (cameraFront * float(i)));
             result) {
           if (result->blockExists) {
-            updateBlock(result.value(), BlockWorld::air);
+            potentialTarget = result;
             break;
           }
         }
@@ -194,10 +217,14 @@ void BlockWorld::modifyFirstTracedBlock(glm::vec3 position, glm::vec3 rotation,
     default:
       assert(false);
   }
+  return potentialTarget;
 }
 
 void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
                              BlockType type) {
+  // In theory we need to lock here. But the write access only happens on the 
+    // main thread as well as this access here, so we can skip it for now.
+    
   auto it = m_chunkData.find(position.chunkIndex);
   assert(it != m_chunkData.end());
 
@@ -208,7 +235,7 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
 
   it->second.data[heightOffset + inLayerOffset] = type;
   it->second.state = ChunkState::DirtyRendering;
-  
+
   bool allNeighborBlocksExist = true;
   for (auto y = -1; y < 2; ++y) {
     for (auto z = -1; z < 2; ++z) {
@@ -227,7 +254,8 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
 
 std::optional<BlockWorld::BlockPosition> BlockWorld::getBlockPosition(
     glm::vec3 position) {
-  if (position.y < 0.0f || position.y > chunkHeight) {
+  std::lock_guard g{m_chunkDataMutex};
+  if (position.y < 0.0f || position.y >= chunkHeight) {
     return {};
   }
 
@@ -328,6 +356,7 @@ void BlockWorld::updateVisibilityBit(const BlockPosition& position,
         std::span<BlockType> data;
 
         if (positionWithOffset.chunkIndex != position.chunkIndex) {
+          std::lock_guard g{m_chunkDataMutex};
           auto itChunk = m_chunkData.find(position.chunkIndex);
           // This can e.g. happen if the chunk is not done yet
           if (itChunk != m_chunkData.end() ||

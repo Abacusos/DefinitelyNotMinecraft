@@ -20,7 +20,12 @@ class BlockWorld {
  public:
   explicit BlockWorld(Config* config);
 
-  enum class ChunkState { Created, InProgress, FinishedGeneration, DirtyRendering };
+  enum class ChunkState {
+    Created,
+    InProgress,
+    FinishedGeneration,
+    DirtyRendering
+  };
 
   ChunkState requestChunk(glm::ivec2 chunkPosition);
   bool isRenderingDirty(glm::ivec2 chunkPosition) const;
@@ -28,15 +33,17 @@ class BlockWorld {
   std::span<const BlockType> getChunkData(glm::ivec2 chunkPosition) const;
 
   enum class BlockAction { Add, Destroy };
-  void modifyFirstTracedBlock(glm::vec3 position, glm::vec3 rotation,
-                              BlockAction action);
-
-    struct BlockPosition {
+  struct BlockPosition {
     glm::ivec2 chunkIndex;
     glm::ivec3 positionWithinChunk;
     bool blockExists = false;
   };
-    void updateBlock(const BlockPosition& position, BlockType type);
+
+  void modifyFirstTracedBlock(
+      const std::optional<BlockWorld::BlockPosition>& potentialTarget);
+  std::optional<BlockPosition> getFirstTracedBlock(glm::vec3 position,
+                                                   glm::vec3 rotation);
+  void updateBlock(const BlockPosition& position, BlockType type);
 
   constexpr static u64 chunkLocalSize = 32u;
   constexpr static u64 chunkHeight = 128u;
@@ -53,6 +60,12 @@ class BlockWorld {
     std::future<void> loadTask;
     ChunkState state = ChunkState::Created;
   };
+  // The usage of this one may looks a bit strange in the cpp file but there is
+  // only a problem with inserting and calling find at the same time. The actual
+  // access to data only happens from one thread at a time.
+  // A better solution would be to have read and write locks so we can specify
+  // this beforehand because all read access can happen concurrently.
+  mutable std::mutex m_chunkDataMutex;
   std::unordered_map<glm::ivec2, Chunk> m_chunkData;
 
   std::optional<BlockPosition> getBlockPosition(glm::vec3 position);

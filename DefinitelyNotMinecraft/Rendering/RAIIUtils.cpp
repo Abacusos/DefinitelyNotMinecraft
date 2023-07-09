@@ -334,7 +334,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
         vertexInputAttributeFormatOffset,
     vk::FrontFace frontFace, bool depthBuffered,
     vk::raii::PipelineLayout const& pipelineLayout,
-    vk::raii::RenderPass const& renderPass) {
+    vk::raii::RenderPass const& renderPass, vk::PrimitiveTopology topology) {
   std::array<vk::PipelineShaderStageCreateInfo, 2>
       pipelineShaderStageCreateInfos = {
           vk::PipelineShaderStageCreateInfo(
@@ -365,8 +365,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
   }
 
   vk::PipelineInputAssemblyStateCreateInfo pipelineInputAssemblyStateCreateInfo(
-      vk::PipelineInputAssemblyStateCreateFlags(),
-      vk::PrimitiveTopology::eTriangleList);
+      vk::PipelineInputAssemblyStateCreateFlags(), topology);
 
   vk::PipelineViewportStateCreateInfo pipelineViewportStateCreateInfo(
       vk::PipelineViewportStateCreateFlags(), 1, nullptr, 1, nullptr);
@@ -787,6 +786,31 @@ void dnm::updateDescriptorSets(
   device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
+void dnm::updateDescriptorSets(
+    vk::raii::Device const& device,
+    vk::raii::DescriptorSet const& descriptorSet,
+    std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
+                         vk::DeviceSize, vk::raii::BufferView const*>>
+        bufferData) {
+  std::vector<vk::DescriptorBufferInfo> bufferInfos;
+  bufferInfos.reserve(bufferData.size());
+
+  std::vector<vk::WriteDescriptorSet> writeDescriptorSets;
+  writeDescriptorSets.reserve(bufferData.size() + 1);
+  u32 dstBinding = 0;
+  for (auto const& bd : bufferData) {
+    bufferInfos.emplace_back(*std::get<1>(bd), 0, std::get<2>(bd));
+    vk::BufferView bufferView;
+    if (std::get<3>(bd)) {
+      bufferView = **std::get<3>(bd);
+    }
+    writeDescriptorSets.emplace_back(
+        *descriptorSet, dstBinding++, 0, 1, std::get<0>(bd), nullptr,
+        &bufferInfos.back(), std::get<3>(bd) ? &bufferView : nullptr);
+  }
+  device.updateDescriptorSets(writeDescriptorSets, nullptr);
+}
+
 VKAPI_ATTR VkBool32 VKAPI_CALL dnm::debugUtilsMessengerCallback(
     VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
     VkDebugUtilsMessageTypeFlagsEXT messageTypes,
@@ -890,9 +914,38 @@ void registerDebugMarker(const vk::raii::Device& device,
 #endif
 }
 
-BufferRegistration::~BufferRegistration() {
-  if (renderer) {
-    renderer->removeBufferRegistration(identifier);
-  }
+void registerDebugMarker(const vk::raii::Device& device,
+                         const vk::raii::Pipeline& pipeline,
+                         std::string_view name) {
+#if !defined(NDEBUG)
+  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
+      vk::DebugReportObjectTypeEXT::ePipeline, (u64)((VkPipeline)(*pipeline)),
+      name.data()});
+#endif
 }
+
+void registerDebugMarker(const vk::raii::Device& device,
+                         const vk::raii::CommandBuffer& commandBuffer,
+                         std::string_view name) {
+#if !defined(NDEBUG)
+  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
+      vk::DebugReportObjectTypeEXT::eCommandBuffer,
+      (u64)((VkCommandBuffer)(*commandBuffer)), name.data()});
+#endif
+}
+
+void registerDebugMarker(const vk::raii::Device& device,
+                         std::string_view name) {
+#if !defined(NDEBUG)
+  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
+      vk::DebugReportObjectTypeEXT::eDevice,
+      (u64)((VkDevice)(*device)), name.data()});
+#endif
+}
+
+  BufferRegistration::~BufferRegistration() {
+    if (renderer) {
+      renderer->removeBufferRegistration(identifier);
+    }
+  }
 }  // namespace dnm

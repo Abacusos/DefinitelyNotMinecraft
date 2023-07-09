@@ -207,7 +207,10 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   recreateBlockDependentBuffers();
 
   m_commandBufferCompute = m_renderer->getCommandBuffer();
+  registerDebugMarker(device, m_commandBufferCompute,
+                      "Drawcall Generation Command Buffer");
   m_commandBuffer = m_renderer->getCommandBuffer();
+  registerDebugMarker(device, m_commandBuffer, "Block Rendering Command Buffer");
 
   m_drawCallGenerationFinished =
       vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
@@ -247,8 +250,8 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
 
     m_commandBufferCompute.reset();
     m_commandBufferCompute.begin(vk::CommandBufferBeginInfo());
-    OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBufferCompute));
-    OPTICK_GPU_EVENT("Compute Draw Calls");
+    //OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBufferCompute));
+    //OPTICK_GPU_EVENT("Compute Draw Calls");
     m_commandBufferCompute.bindPipeline(vk::PipelineBindPoint::eCompute,
                                         *m_computePipeline);
     m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
@@ -275,8 +278,8 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
 
     m_commandBuffer.reset();
     m_commandBuffer.begin(vk::CommandBufferBeginInfo());
-    OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBuffer));
-    OPTICK_GPU_EVENT("Render Blocks");
+    //OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBuffer));
+    //OPTICK_GPU_EVENT("Render Blocks");
     m_commandBuffer.beginRenderPass(renderPassBeginInfo,
                                     vk::SubpassContents::eInline);
     m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
@@ -386,10 +389,14 @@ void BlockRenderingModule::recreatePipeline() {
       {{vk::Format::eR32G32B32Sfloat, 0}, {vk::Format::eR32G32Sfloat, 12}},
       vk::FrontFace::eCounterClockwise, true, m_pipelineLayout,
       m_renderer->getRenderPass());
+  registerDebugMarker(device, m_graphicsPipeline,
+                      "Block Rendering Graphics Pipeline");
 
   m_computePipeline = makeComputePipeline(
       device, m_renderer->getPipelineCache(), m_drawCallGenerationComputeModule,
       nullptr, m_pipelineLayout);
+  registerDebugMarker(device, m_computePipeline,
+                      "Draw Call Generation Compute Pipeline");
 
   const auto* projectionClipBuffer =
       m_renderer->getGlobalBuffer(GlobalBuffers::ProjectionClip);

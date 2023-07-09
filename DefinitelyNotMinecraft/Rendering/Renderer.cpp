@@ -39,6 +39,7 @@ Renderer::Renderer(Config* config) : m_config{config} {
   m_device =
       makeDevice(m_physicalDevice, graphicsAndPresentQueueFamilyIndex.first,
                  getDeviceExtensions(), &feature, &features2);
+  registerDebugMarker(m_device, "DNM Device");
 
   m_commandPool = vk::raii::CommandPool(
       m_device, {vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
@@ -123,7 +124,7 @@ void Renderer::finishDrawFrame(vk::raii::Semaphore& finishedRendering,
                                     imageIndex);
 
   // Optick does not use the pointer, so just use void
-  OPTICK_GPU_FLIP(nullptr);
+  // OPTICK_GPU_FLIP(nullptr);
   vk::Result result = m_presentQueue.presentKHR(presentInfoKHR);
   switch (result) {
     case vk::Result::eSuccess:

@@ -40,6 +40,9 @@ void Imgui::logicFrame(TimeSpan dt, Camera* camera) {
   auto rotation = camera->getRotation();
   ImGui::Text("Camera rotation %.1f %.1f %.1f", rotation.x, rotation.y,
               rotation.z);
+    
+  ImGui::Text("Modification mode %d", m_config->insertionMode);
+
 
   ImGui::Checkbox("Generate draw calls every frame",
                 &m_config->everyFrameGenerateDrawCalls);

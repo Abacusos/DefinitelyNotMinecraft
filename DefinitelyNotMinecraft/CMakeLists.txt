@@ -1,5 +1,5 @@
 ﻿# Add source to this project's executable.
-add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp"   "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
+add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp"   "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "RenderingModule/GizmoRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
 
 set(FOLDERS "Core" "Logic" "Rendering" "RenderingModule" "Shader")
 foreach(Folder IN LISTS FOLDERS)
@@ -33,7 +33,7 @@ endforeach()
 set(TARGET_SHADER_DIRECTORY ${CMAKE_BINARY_DIR}/DefinitelyNotMinecraft/Shaders)
 file(MAKE_DIRECTORY ${TARGET_SHADER_DIRECTORY})
 set(SHADER_SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/Shaders)
-set(SHADER_LIST "World.vert" "World.frag" "DrawCallGenerationWorld.comp")
+set(SHADER_LIST "World.vert" "World.frag" "Gizmo.vert" "Gizmo.frag" "DrawCallGenerationWorld.comp")
 
 foreach(Shader IN LISTS SHADER_LIST)
     configure_file(${SHADER_SOURCE_DIR}/${Shader} ${TARGET_SHADER_DIRECTORY}/${Shader} COPYONLY)

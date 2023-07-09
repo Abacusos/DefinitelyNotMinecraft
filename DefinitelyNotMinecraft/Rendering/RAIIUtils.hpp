@@ -539,7 +539,8 @@ vk::raii::Pipeline makeGraphicsPipeline(
         vertexInputAttributeFormatOffset,
     vk::FrontFace frontFace, bool depthBuffered,
     vk::raii::PipelineLayout const& pipelineLayout,
-    vk::raii::RenderPass const& renderPass);
+    vk::raii::RenderPass const& renderPass,
+    vk::PrimitiveTopology topology = vk::PrimitiveTopology::eTriangleList);
 
 vk::raii::Pipeline makeComputePipeline(
     vk::raii::Device const& device,
@@ -600,6 +601,13 @@ void updateDescriptorSets(
         bufferData,
     std::span<dnm::TextureData> textureData, u32 bindingOffset = 0);
 
+void updateDescriptorSets(
+    vk::raii::Device const& device,
+    vk::raii::DescriptorSet const& descriptorSet,
+    std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
+                         vk::DeviceSize, vk::raii::BufferView const*>>
+        bufferData);
+
 std::vector<std::string> getDeviceExtensions();
 
 std::vector<std::string> getInstanceExtensions();
@@ -632,5 +640,12 @@ void registerDebugMarker(const vk::raii::Device& device,
 void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::Semaphore& semaphore,
                          std::string_view name);
-
+void registerDebugMarker(const vk::raii::Device& device,
+                         const vk::raii::Pipeline& pipeline,
+                         std::string_view name);
+void registerDebugMarker(const vk::raii::Device& device,
+                         const vk::raii::CommandBuffer& commandBuffer,
+                         std::string_view name);
+void registerDebugMarker(const vk::raii::Device& device,
+                         std::string_view name);
 }  // namespace dnm
