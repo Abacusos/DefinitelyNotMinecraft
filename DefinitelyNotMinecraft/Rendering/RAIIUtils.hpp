@@ -34,9 +34,10 @@
 #include <numeric>
 #include <span>
 
-#include "GlobalBuffers.hpp"
-#include "ShortTypes.hpp"
-#include "Config.hpp"
+#include <Core/Config.hpp>
+#include <Rendering/GlobalBuffers.hpp>
+#include <Core/Profiler.hpp>
+#include <Core/ShortTypes.hpp>
 
 namespace dnm {
 const uint64_t FenceTimeout = 100000000;
@@ -69,6 +70,7 @@ vk::raii::DeviceMemory allocateDeviceMemory(
 template <typename T>
 void copyToDevice(vk::raii::DeviceMemory const& deviceMemory,
                   std::span<const T> data, vk::DeviceSize stride = sizeof(T)) {
+  ZoneScoped;
   auto count = data.size();
   assert(count > 0);
   assert(sizeof(T) <= stride);
@@ -119,7 +121,7 @@ struct BufferData {
                  vk::MemoryPropertyFlagBits::eHostVisible |
                  vk::MemoryPropertyFlagBits::eHostCoherent)
       : buffer(device, vk::BufferCreateInfo({}, size, usage)),
-        deviceMemory(dnm::allocateDeviceMemory(
+        deviceMemory(allocateDeviceMemory(
             device, physicalDevice.getMemoryProperties(),
             buffer.getMemoryRequirements(), propertyFlags))
 #if !defined(NDEBUG)
@@ -170,8 +172,8 @@ struct BufferData {
     size_t dataSize = data.size() * elementSize;
     assert(dataSize <= m_size);
 
-    dnm::BufferData stagingBuffer(physicalDevice, device, dataSize,
-                                  vk::BufferUsageFlagBits::eTransferSrc);
+    BufferData stagingBuffer(physicalDevice, device, dataSize,
+                             vk::BufferUsageFlagBits::eTransferSrc);
     copyToDevice(stagingBuffer.deviceMemory, data.data(), data.size(),
                  elementSize);
 
@@ -215,7 +217,7 @@ struct ImageData {
                        vk::SharingMode::eExclusive,
                        {},
                        initialLayout}),
-        deviceMemory(dnm::allocateDeviceMemory(
+        deviceMemory(allocateDeviceMemory(
             device, physicalDevice.getMemoryProperties(),
             image.getMemoryRequirements(), memoryProperties)) {
     image.bindMemory(*deviceMemory, 0);
@@ -281,7 +283,7 @@ struct SurfaceData {
 
   SurfaceData(vk::raii::Instance const& instance, std::string const& windowName,
               vk::Extent2D const& extent_)
-      : extent(extent_), window(dnm::createWindow(windowName, extent)) {
+      : extent(extent_), window(createWindow(windowName, extent)) {
     VkSurfaceKHR _surface;
     VkResult err = glfwCreateWindowSurface(static_cast<VkInstance>(*instance),
                                            window.handle, nullptr, &_surface);
@@ -290,7 +292,7 @@ struct SurfaceData {
   }
 
   vk::Extent2D extent;
-  dnm::WindowData window = nullptr;
+  WindowData window = nullptr;
   vk::raii::SurfaceKHR surface = nullptr;
 };
 
@@ -309,7 +311,7 @@ struct SwapChainData {
                 vk::raii::SwapchainKHR const* pOldSwapchain,
                 u32 graphicsQueueFamilyIndex, u32 presentQueueFamilyIndex) {
     vk::SurfaceFormatKHR surfaceFormat =
-        dnm::pickSurfaceFormat(physicalDevice.getSurfaceFormatsKHR(*surface));
+        pickSurfaceFormat(physicalDevice.getSurfaceFormatsKHR(*surface));
     colorFormat = surfaceFormat.format;
 
     vk::SurfaceCapabilitiesKHR surfaceCapabilities =
@@ -345,7 +347,7 @@ struct SwapChainData {
            vk::CompositeAlphaFlagBitsKHR::eInherit)
             ? vk::CompositeAlphaFlagBitsKHR::eInherit
             : vk::CompositeAlphaFlagBitsKHR::eOpaque;
-    vk::PresentModeKHR presentMode = dnm::pickPresentMode(
+    vk::PresentModeKHR presentMode = pickPresentMode(
         physicalDevice.getSurfacePresentModesKHR(*surface));
     vk::SwapchainCreateInfoKHR swapChainCreateInfo(
         {}, *surface, surfaceCapabilities.minImageCount + 1, colorFormat,
@@ -441,7 +443,8 @@ struct TextureData {
   }
 
   void setImage(vk::raii::CommandBuffer const& commandBuffer, void* textureData,
-                bool setShaderReadOnlyOptimal = true, u32 mipLevels = 1) {
+                bool setShaderReadOnlyOptimal = true, u32 mipLevels = 1) const
+  {
     u64 neededSize = needsStaging
                          ? stagingBufferData.buffer.getMemoryRequirements().size
                          : imageData.image.getMemoryRequirements().size;
@@ -455,14 +458,14 @@ struct TextureData {
     if (needsStaging) {
       // Since we're going to blit to the texture image, set its layout to
       // eTransferDstOptimal
-      dnm::setImageLayout(commandBuffer, *imageData.image, imageData.format,
-                          vk::ImageLayout::eUndefined,
-                          vk::ImageLayout::eTransferDstOptimal);
+      setImageLayout(commandBuffer, *imageData.image, imageData.format,
+                     vk::ImageLayout::eUndefined,
+                     vk::ImageLayout::eTransferDstOptimal);
 
       for (u32 mipLevel = 1; mipLevel < mipLevels; ++mipLevel) {
-        dnm::setImageLayout(commandBuffer, *imageData.image, imageData.format,
-                            vk::ImageLayout::eUndefined,
-                            vk::ImageLayout::eTransferDstOptimal, mipLevel);
+          setImageLayout(commandBuffer, *imageData.image, imageData.format,
+                         vk::ImageLayout::eUndefined,
+                         vk::ImageLayout::eTransferDstOptimal, mipLevel);
       }
 
       vk::BufferImageCopy copyRegion(
@@ -475,15 +478,15 @@ struct TextureData {
       // Set the layout for the texture image from eTransferDstOptimal to
       // eShaderReadOnlyOptimal
       if (setShaderReadOnlyOptimal) {
-        dnm::setImageLayout(commandBuffer, *imageData.image, imageData.format,
-                            vk::ImageLayout::eTransferDstOptimal,
-                            vk::ImageLayout::eShaderReadOnlyOptimal);
+          setImageLayout(commandBuffer, *imageData.image, imageData.format,
+                         vk::ImageLayout::eTransferDstOptimal,
+                         vk::ImageLayout::eShaderReadOnlyOptimal);
       }
     } else {
       // If we can use the linear tiled image as a texture, just do it
-      dnm::setImageLayout(commandBuffer, *imageData.image, imageData.format,
-                          vk::ImageLayout::ePreinitialized,
-                          vk::ImageLayout::eShaderReadOnlyOptimal);
+      setImageLayout(commandBuffer, *imageData.image, imageData.format,
+                     vk::ImageLayout::ePreinitialized,
+                     vk::ImageLayout::eShaderReadOnlyOptimal);
     }
   }
 
@@ -527,8 +530,7 @@ std::vector<vk::raii::Framebuffer> makeFramebuffers(
     vk::raii::ImageView const* pDepthImageView, vk::Extent2D const& extent);
 
 vk::raii::Pipeline makeGraphicsPipeline(
-    const Config* config,
-    vk::raii::Device const& device,
+    const Config* config, vk::raii::Device const& device,
     vk::raii::PipelineCache const& pipelineCache,
     vk::raii::ShaderModule const& vertexShaderModule,
     vk::SpecializationInfo const* vertexShaderSpecializationInfo,
@@ -591,7 +593,7 @@ void updateDescriptorSets(
     std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
                          vk::DeviceSize, vk::raii::BufferView const*>>
         bufferData,
-    dnm::TextureData const& textureData, u32 bindingOffset = 0);
+    TextureData const& textureData, u32 bindingOffset = 0);
 
 void updateDescriptorSets(
     vk::raii::Device const& device,
@@ -599,7 +601,7 @@ void updateDescriptorSets(
     std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
                          vk::DeviceSize, vk::raii::BufferView const*>>
         bufferData,
-    std::span<dnm::TextureData> textureData, u32 bindingOffset = 0);
+    std::span<TextureData> textureData, u32 bindingOffset = 0);
 
 void updateDescriptorSets(
     vk::raii::Device const& device,
@@ -646,6 +648,5 @@ void registerDebugMarker(const vk::raii::Device& device,
 void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::CommandBuffer& commandBuffer,
                          std::string_view name);
-void registerDebugMarker(const vk::raii::Device& device,
-                         std::string_view name);
+void registerDebugMarker(const vk::raii::Device& device, std::string_view name);
 }  // namespace dnm

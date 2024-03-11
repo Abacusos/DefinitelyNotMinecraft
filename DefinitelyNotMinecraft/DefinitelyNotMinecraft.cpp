@@ -1,17 +1,17 @@
 ﻿#include "DefinitelyNotMinecraft.hpp"
 
-#include "BlockRenderingModule.hpp"
-#include "Camera.hpp"
-#include "Chrono.hpp"
-#include "Config.hpp"
-#include "GizmoRenderingModule.hpp"
-#include "Imgui.hpp"
-#include "ImguiRenderingModule.hpp"
-#include "Input.hpp"
-#include "Renderer.hpp"
-#include "ShaderManager.hpp"
-#include "StringInterner.hpp"
-#include "optick.h"
+#include <RenderingModule/BlockRenderingModule.hpp>
+#include <Logic/Camera.hpp>
+#include <Core/Chrono.hpp>
+#include <Core/Config.hpp>
+#include <RenderingModule/GizmoRenderingModule.hpp>
+#include <Logic/Imgui.hpp>
+#include <RenderingModule/ImguiRenderingModule.hpp>
+#include <Logic/Input.hpp>
+#include <Core/Profiler.hpp>
+#include <Rendering/Renderer.hpp>
+#include <Shader/ShaderManager.hpp>
+#include <Core/StringInterner.hpp>
 
 int main(int /*argc*/, char** /*argv*/) {
   using namespace dnm;
@@ -30,13 +30,13 @@ int main(int /*argc*/, char** /*argv*/) {
     ImguiRenderingModule imguiModule{&config, &renderer};
     GizmoRenderingModule gizmoRenderingModule{
         &config, &renderer, &shaderManager, &world, &interner};
-    
+
     Input input(&camera, window, &world, &config, &gizmoRenderingModule);
 
     auto lastFrame = std::chrono::system_clock::now();
 
     while (!glfwWindowShouldClose(window)) {
-      OPTICK_FRAME("MainThread");
+      FrameMark;
       auto now = std::chrono::system_clock::now();
       auto deltaTime = std::chrono::duration_cast<TimeSpan>(now - lastFrame);
       lastFrame = now;
@@ -56,8 +56,7 @@ int main(int /*argc*/, char** /*argv*/) {
       }
 
       blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
-                                     deltaTime, cameraMoved,
-                                     camera.getPosition());
+                                     deltaTime, cameraMoved, &camera);
       imguiModule.drawFrame(
           renderer.getFrameBuffer(imageIndex), deltaTime,
           blockRenderingModule.getRenderingFinishedSemaphore());
@@ -67,10 +66,18 @@ int main(int /*argc*/, char** /*argv*/) {
 
       renderer.finishDrawFrame(
           gizmoRenderingModule.getRenderingFinishedSemaphore(), imageIndex);
+
+      if (config.limitFrames) {
+        using namespace std::chrono_literals;
+        constexpr auto targetFrameRate = std::chrono::milliseconds(16ms);
+        auto deltaTime = (std::chrono::system_clock::now() - now);
+        if (deltaTime < targetFrameRate) {
+          std::this_thread::sleep_for(targetFrameRate - deltaTime);
+        }
+      }
     }
 
     renderer.waitIdle();
-    OPTICK_SHUTDOWN()
   } catch (vk::SystemError& err) {
     std::cout << "vk::SystemError: " << err.what() << std::endl;
     exit(-1);

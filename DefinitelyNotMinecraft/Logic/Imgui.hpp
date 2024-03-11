@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Chrono.hpp"
-#include "Config.hpp"
+#include <Core/Chrono.hpp>
+#include <Core/Config.hpp>
 
 struct GLFWwindow;
 
@@ -13,7 +13,7 @@ class Imgui {
   explicit Imgui(Config* config, GLFWwindow* window);
   ~Imgui();
 
-  void logicFrame(TimeSpan dt, Camera* camera);
+  void logicFrame(TimeSpan dt, const Camera* camera) const;
 
   private:
   Config* m_config;

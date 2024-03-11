@@ -2,7 +2,7 @@
 
 #include <limits>
 
-#include "ShortTypes.hpp"
+#include <Core/ShortTypes.hpp>
 
 namespace dnm {
 
@@ -13,7 +13,7 @@ class Handle {
       std::numeric_limits<IndexType>::max();
   IndexType index = IndexType(0);
 
-  operator bool() const { index != invalidValue; };
+  operator bool() const { return index != invalidValue; };
 };
 
 class String;

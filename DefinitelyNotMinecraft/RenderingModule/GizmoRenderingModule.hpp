@@ -1,9 +1,9 @@
 #pragma once
 
-#include "BlockWorld.hpp"
-#include "Config.hpp"
-#include "Handle.hpp"
-#include "Renderer.hpp"
+#include <Logic/BlockWorld.hpp>
+#include <Core/Config.hpp>
+#include <Core/Handle.hpp>
+#include <Rendering/Renderer.hpp>
 
 namespace dnm {
 
@@ -17,8 +17,8 @@ class GizmoRenderingModule {
                                 StringInterner* interner);
   
   struct VertexGizmo {
-    glm::vec3 x, y, z;  // Position data
-    glm::vec3 r, g, b;  // color
+    v3 x, y, z;  // Position data
+    v3 r, g, b;  // color
   };
   void drawLines(std::span<VertexGizmo> lineElements);
 

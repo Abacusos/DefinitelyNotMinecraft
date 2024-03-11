@@ -1,12 +1,14 @@
 #pragma once
 
-#include "BlockWorld.hpp"
-#include "Config.hpp"
-#include "Handle.hpp"
-#include "Renderer.hpp"
+#include <Logic/BlockWorld.hpp>
+#include <Core/Config.hpp>
+#include <Core/GPUProfiller.hpp>
+#include <Core/Handle.hpp>
+#include <Rendering/Renderer.hpp>
 
 namespace dnm {
 
+class Camera;
 class ShaderManager;
 class StringInterner;
 
@@ -17,7 +19,7 @@ class BlockRenderingModule {
                                 StringInterner* interner);
 
   void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
-                 bool cameraMoved, glm::vec3 cameraPosition);
+                 bool cameraMoved, Camera* camera);
 
   vk::raii::Semaphore& getRenderingFinishedSemaphore();
 
@@ -26,7 +28,8 @@ class BlockRenderingModule {
   void recompileShadersIfNecessary(bool force = false);
 
   void recreateBlockDependentBuffers();
-  bool updateBlockWorldData(glm::vec3 cameraPosition);
+  bool updateBlockWorldData(v3 cameraPosition);
+  void updateCullingData(const Camera* camera) const;
 
  private:
   Config* m_config;
@@ -50,6 +53,7 @@ class BlockRenderingModule {
   dnm::BufferData m_blockTypeBuffer{nullptr};
   dnm::BufferData m_chunkConstantsBuffer{nullptr};
   dnm::BufferData m_chunkRemapIndex{nullptr};
+  dnm::BufferData m_cullingData{nullptr};
   dnm::TextureData m_textureData{nullptr};
 
   vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
@@ -65,6 +69,9 @@ class BlockRenderingModule {
   vk::raii::CommandBuffer m_commandBuffer{nullptr};
   vk::raii::Semaphore m_drawCallGenerationFinished{nullptr};
   vk::raii::Semaphore m_renderingFinished{nullptr};
+
+  GPUProfilerContext m_computeProfilerContext;
+  GPUProfilerContext m_renderingProfilerContext;
 
   u32 loadCountChunksLastFrame = 0u;
   glm::ivec2 m_cameraChunkLastFrame{-10000, -10000};

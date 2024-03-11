@@ -1,13 +1,13 @@
 #pragma once
 
-#include "Chrono.hpp"
+#include <Core/Chrono.hpp>
 
 struct GLFWwindow;
 
 namespace dnm {
 class Camera;
 class BlockWorld;
-class Config;
+struct Config;
 class GizmoRenderingModule;
 
 class Input {

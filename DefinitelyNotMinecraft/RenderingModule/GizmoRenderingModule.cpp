@@ -1,9 +1,8 @@
-#include "GizmoRenderingModule.hpp"
-
-#include "GLMInclude.hpp"
-#include "ShaderManager.hpp"
-#include "StringInterner.hpp"
-#include "optick.h"
+#include <Core/GLMInclude.hpp>
+#include <Core/Profiler.hpp>
+#include <Core/StringInterner.hpp>
+#include <RenderingModule/GizmoRenderingModule.hpp>
+#include <Shader/ShaderManager.hpp>
 
 namespace dnm {
 namespace {
@@ -50,8 +49,9 @@ GizmoRenderingModule::GizmoRenderingModule(Config* config, Renderer* renderer,
 }
 
 void GizmoRenderingModule::drawLines(std::span<VertexGizmo> lineElements) {
-  u32 elementsToCopy = std::min(reservedGizmoSpace - m_occupiedVertexPlaces,
-                                static_cast<u32>(lineElements.size()));
+  const u32 elementsToCopy =
+      std::min(reservedGizmoSpace - m_occupiedVertexPlaces,
+               static_cast<u32>(lineElements.size()));
   assert(elementsToCopy == lineElements.size());
   std::copy(lineElements.begin(), lineElements.begin() + elementsToCopy,
             m_verticesGizmo.begin() + m_occupiedVertexPlaces);
@@ -61,14 +61,13 @@ void GizmoRenderingModule::drawLines(std::span<VertexGizmo> lineElements) {
 void GizmoRenderingModule::drawFrame(
     const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
     const vk::raii::Semaphore& previousRenderStepFinished) {
-  OPTICK_EVENT();
-  const auto& device = m_renderer->getDevice();
+  ZoneScoped;
 
-  auto extent = m_renderer->getExtent();
+  const auto extent = m_renderer->getExtent();
 
   recompileShadersIfNecessary();
 
-  vk::RenderPassBeginInfo renderPassBeginInfo(
+  const vk::RenderPassBeginInfo renderPassBeginInfo(
       *m_renderPass, *frameBuffer, vk::Rect2D(vk::Offset2D(0, 0), extent));
 
   m_commandBuffer.reset();
@@ -104,14 +103,14 @@ void GizmoRenderingModule::drawFrame(
   }
   m_commandBuffer.end();
 
-  auto graphicsQueue = m_renderer->getGraphicsQueue();
+  const auto graphicsQueue = m_renderer->getGraphicsQueue();
 
   vk::PipelineStageFlags waitDestinationStageMask(
       vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
-  vk::SubmitInfo graphicsInfo{*previousRenderStepFinished,
-                              waitDestinationStageMask, *m_commandBuffer,
-                              *m_renderingFinished};
+  const vk::SubmitInfo graphicsInfo{*previousRenderStepFinished,
+                                    waitDestinationStageMask, *m_commandBuffer,
+                                    *m_renderingFinished};
 
   graphicsQueue.submit(graphicsInfo);
 }
@@ -123,21 +122,18 @@ vk::raii::Semaphore& GizmoRenderingModule::getRenderingFinishedSemaphore() {
 void GizmoRenderingModule::recreatePipeline() {
   m_renderer->waitIdle();
 
-  std::array<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>, 2>
-      layout{// projection
-             std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-                 vk::DescriptorType::eUniformBuffer, 1u,
-                 vk::ShaderStageFlagBits::eVertex |
-                     vk::ShaderStageFlagBits::eCompute},
-             // view
-             std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-                 vk::DescriptorType::eUniformBuffer, 1u,
-                 vk::ShaderStageFlagBits::eVertex |
-                     vk::ShaderStageFlagBits::eCompute}
+  std::array layout{// projection
+                    std::tuple{vk::DescriptorType::eUniformBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute},
+                    // view
+                    std::tuple{vk::DescriptorType::eUniformBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute}
 
-      };
+  };
 
-  std::array<vk::DescriptorPoolSize, 1u> sizes{
+  std::array sizes{
       vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 2u}};
 
   const auto& device = m_renderer->getDevice();
@@ -159,7 +155,7 @@ void GizmoRenderingModule::recreatePipeline() {
       {{vk::Format::eR32G32B32Sfloat, 0}, {vk::Format::eR32G32B32Sfloat, 12}},
       vk::FrontFace::eCounterClockwise, true, m_pipelineLayout,
       m_renderer->getRenderPass(), vk::PrimitiveTopology::eLineList);
-  registerDebugMarker(device, m_graphicsPipeline, "Gimzo Graphics Pipeline");
+  registerDebugMarker(device, m_graphicsPipeline, "Gizmo Graphics Pipeline");
 
   const auto* projectionClipBuffer =
       m_renderer->getGlobalBuffer(GlobalBuffers::ProjectionClip);
@@ -168,17 +164,14 @@ void GizmoRenderingModule::recreatePipeline() {
       m_renderer->getGlobalBuffer(GlobalBuffers::CameraView);
   assert(viewBuffer);
 
-  std::array<std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>,
-             2u>
-      update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer, *projectionClipBuffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer, *viewBuffer, VK_WHOLE_SIZE,
-                 nullptr}};
+  std::array update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer,
+                        *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer, *viewBuffer,
+                        VK_WHOLE_SIZE, nullptr}};
 
   updateDescriptorSets(device, m_descriptorSet, update);
 }
@@ -208,7 +201,7 @@ void GizmoRenderingModule::recompileShadersIfNecessary(bool force) {
 
   if (anyUpdated) {
     recreatePipeline();
-    std::cout << "Succesfully recompiled shaders and recreated the pipeline "
+    std::cout << "Successfully recompiled shaders and recreated the pipeline "
                  "for the gizmo rendering module.\n";
   }
 }

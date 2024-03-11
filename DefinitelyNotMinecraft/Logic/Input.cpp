@@ -1,13 +1,14 @@
-#include "Input.hpp"
+#include <Logic/Input.hpp>
 
 #include <vulkan/vulkan_raii.hpp>
 #define GLFW_INCLUDE_NONE
 #include <GLFW/glfw3.h>
 
-#include "BlockWorld.hpp"
-#include "Camera.hpp"
-#include "Config.hpp"
-#include "GizmoRenderingModule.hpp"
+#include <Logic/BlockWorld.hpp>
+#include <Logic/Camera.hpp>
+#include <Core/Config.hpp>
+#include <RenderingModule/GizmoRenderingModule.hpp>
+#include <Core/Profiler.hpp>
 
 namespace dnm {
 
@@ -25,6 +26,7 @@ Input::Input(Camera* camera, GLFWwindow* window, BlockWorld* world,
 }
 
 void Input::processInput(GLFWwindow* window, TimeSpan dt) {
+ZoneScoped;
   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
     glfwSetWindowShouldClose(window, true);
 
@@ -36,6 +38,10 @@ void Input::processInput(GLFWwindow* window, TimeSpan dt) {
     m_camera->processKeyboard(Camera::CameraMovement::LEFT, dt);
   if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
     m_camera->processKeyboard(Camera::CameraMovement::RIGHT, dt);
+  if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    m_camera->processKeyboard(Camera::CameraMovement::DOWN, dt);
+  if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+    m_camera->processKeyboard(Camera::CameraMovement::UP, dt);
 
   double xpos = 0.0f;
   double ypos = 0.0f;
@@ -66,10 +72,20 @@ void Input::processInput(GLFWwindow* window, TimeSpan dt) {
     m_config->insertionMode =
         static_cast<u32>(BlockWorld::BlockAction::Destroy);
 
-  auto positionBlock = m_world->getFirstTracedBlock(m_camera->getPosition(),
-                                                    m_camera->getRotation());
+  auto pos = m_camera->getPosition();
+  auto fwd = m_camera->getForward();
+  const v3 p{0.01f, 0.0f, 0.0f};
+  const v3 pfwd = p + fwd * 3.0f;
+  const v3 r{1.0f, 0.0f, 0.0f};
+  std::array v{
+      GizmoRenderingModule::VertexGizmo{p, r},
+      GizmoRenderingModule::VertexGizmo{pfwd, r}};
+  m_gizmoRendering->drawLines(v);
+
+  auto positionBlock = m_world->getFirstTracedBlock(m_camera);
+
   if (positionBlock) {
-    glm::vec3 position{
+    v3 position{
         positionBlock->chunkIndex.x * BlockWorld::chunkLocalSize +
             positionBlock->positionWithinChunk.x,
         positionBlock->positionWithinChunk.y,
@@ -77,18 +93,18 @@ void Input::processInput(GLFWwindow* window, TimeSpan dt) {
             positionBlock->positionWithinChunk.z};
 
     // slightly push them outwards to make them easier to see
-    const glm::vec3 umm = position + glm::vec3{-0.51f, 0.51f, -0.51f};
-    const glm::vec3 ump = position + glm::vec3{-0.51f, 0.51f, 0.51f};
-    const glm::vec3 upp = position + glm::vec3{0.51f, 0.51f, 0.51f};
-    const glm::vec3 upm = position + glm::vec3{0.51f, 0.51f, -0.51f};
-    const glm::vec3 lmm = position + glm::vec3{-0.51f, -0.51f, -0.51f};
-    const glm::vec3 lmp = position + glm::vec3{-0.51f, -0.51f, 0.51f};
-    const glm::vec3 lpp = position + glm::vec3{0.51f, -0.51f, 0.51f};
-    const glm::vec3 lpm = position + glm::vec3{0.51f, -0.51f, -0.51f};
+    const v3 umm = position + v3{-0.51f, 0.51f, -0.51f};
+    const v3 ump = position + v3{-0.51f, 0.51f, 0.51f};
+    const v3 upp = position + v3{0.51f, 0.51f, 0.51f};
+    const v3 upm = position + v3{0.51f, 0.51f, -0.51f};
+    const v3 lmm = position + v3{-0.51f, -0.51f, -0.51f};
+    const v3 lmp = position + v3{-0.51f, -0.51f, 0.51f};
+    const v3 lpp = position + v3{0.51f, -0.51f, 0.51f};
+    const v3 lpm = position + v3{0.51f, -0.51f, -0.51f};
 
-    const glm::vec3 red{1.0f, 0.0f, 0.0f};
+    constexpr v3 red{1.0f, 0.0f, 0.0f};
 
-    std::array<GizmoRenderingModule::VertexGizmo, 24u> vertices{
+    std::array vertices{
         GizmoRenderingModule::VertexGizmo{umm, red},
         GizmoRenderingModule::VertexGizmo{ump, red},
         GizmoRenderingModule::VertexGizmo{ump, red},
@@ -122,6 +138,12 @@ void Input::processInput(GLFWwindow* window, TimeSpan dt) {
 
   if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
     m_world->modifyFirstTracedBlock(positionBlock);
-}
+
+  if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
+    m_config->disableImgui = true;
+
+  if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS)
+    m_config->disableImgui = false;
+ }
 
 }  // namespace dnm

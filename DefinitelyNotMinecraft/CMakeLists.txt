@@ -1,10 +1,7 @@
 ﻿# Add source to this project's executable.
-add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp"   "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "RenderingModule/GizmoRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
+add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp" "Core/Math.cpp" "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "RenderingModule/GizmoRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
 
-set(FOLDERS "Core" "Logic" "Rendering" "RenderingModule" "Shader")
-foreach(Folder IN LISTS FOLDERS)
-    target_include_directories(DefinitelyNotMinecraft PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/${Folder})
-endforeach()
+target_include_directories(DefinitelyNotMinecraft PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 set_property(TARGET DefinitelyNotMinecraft PROPERTY CXX_STANDARD 20)
 
@@ -17,7 +14,7 @@ target_link_libraries(DefinitelyNotMinecraft PRIVATE glfw)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE stb)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE perlinnoise)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE imgui)
-target_link_libraries(DefinitelyNotMinecraft PRIVATE OptickCore)
+target_link_libraries(DefinitelyNotMinecraft PRIVATE TracyClient)
  
 add_definitions(-DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR)
 
@@ -52,12 +49,3 @@ FetchContent_GetProperties(
   optick
   SOURCE_DIR OptickSourceDir
 )
-
-if (WIN32)
-# copy the .dll file to the same folder as the executable
-add_custom_command(
-    TARGET DefinitelyNotMinecraft POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    $<TARGET_FILE_DIR:OptickCore>
-    $<TARGET_FILE_DIR:DefinitelyNotMinecraft>)
-endif()

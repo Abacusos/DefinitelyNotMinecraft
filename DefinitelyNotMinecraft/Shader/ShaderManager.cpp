@@ -1,4 +1,4 @@
-#include "ShaderManager.hpp"
+#include <Shader/ShaderManager.hpp>
 
 #include <glslang/Public/ResourceLimits.h>
 #include <glslang/SPIRV/GlslangToSpv.h>
@@ -7,7 +7,7 @@
 #include <fstream>
 #include <iostream>
 
-#include "StringInterner.hpp"
+#include <Core/StringInterner.hpp>
 
 namespace dnm {
 
@@ -74,6 +74,8 @@ bool GLSLtoSPV(std::string_view glslShader, vk::ShaderStageFlagBits stageFlag,
   shaderStrings[0] = glslShader.data();
 
   glslang::TShader shader(stage);
+  shader.setEnvTarget(glslang::EShTargetLanguage::EShTargetSpv,
+                      glslang::EShTargetLanguageVersion::EShTargetSpv_1_3);
   shader.setStrings(shaderStrings, 1);
 
   // Enable SPIR-V and Vulkan rules when parsing GLSL
@@ -176,7 +178,8 @@ ShaderHandle ShaderManager::registerShaderFile(
 
 std::optional<vk::raii::ShaderModule> ShaderManager::getCompiledVersion(
     const vk::raii::Device& device, ShaderHandle handle,
-    std::span<Define> defines) {
+    std::span<Define> defines) const
+{
   assert(handle.index < m_shaders.size());
 
   std::string completeShader;

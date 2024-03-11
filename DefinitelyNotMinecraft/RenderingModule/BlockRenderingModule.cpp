@@ -1,14 +1,13 @@
-#include "BlockRenderingModule.hpp"
-
-#include <random>
+#include <RenderingModule/BlockRenderingModule.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
 
-#include "GLMInclude.hpp"
-#include "ShaderManager.hpp"
-#include "StringInterner.hpp"
-#include "optick.h"
+#include <Core/GLMInclude.hpp>
+#include <Core/Profiler.hpp>
+#include <Shader/ShaderManager.hpp>
+#include <Core/StringInterner.hpp>
+#include <Logic/Camera.hpp>
 
 namespace dnm {
 namespace {
@@ -80,6 +79,15 @@ constexpr std::string_view localWGSizeX = "LOCAL_SIZE_X";
 constexpr std::string_view localWGSizeY = "LOCAL_SIZE_Y";
 constexpr std::string_view localWGSizeZ = "LOCAL_SIZE_Z";
 
+struct alignas(16) Plane {
+  v3 normal;
+  float distance;
+};
+
+struct alignas(16) CullingData {
+  Plane frustum[6];
+  u32 cullingEnabled;
+};
 }  // namespace
 
 BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
@@ -110,7 +118,7 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
 
   // Preventing the last few mipmaps due to artifacts in the distance where the
   // colors are mixed to gray then
-  u32 mipLevels =
+  const u32 mipLevels =
       static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) -
       3;
 
@@ -147,9 +155,9 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
                                     vk::PipelineStageFlagBits::eTransfer, {},
                                     {}, {}, barrier);
 
-      std::array<vk::Offset3D, 2u> srcOffsets{
+      std::array srcOffsets{
           vk::Offset3D{0, 0, 0}, vk::Offset3D{mipWidth, mipHeight, 1}};
-      std::array<vk::Offset3D, 2u> dstOffsets{
+      std::array dstOffsets{
           vk::Offset3D{0, 0, 0},
           vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1,
                        mipHeight > 1 ? mipHeight / 2 : 1, 1}};
@@ -209,8 +217,14 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   m_commandBufferCompute = m_renderer->getCommandBuffer();
   registerDebugMarker(device, m_commandBufferCompute,
                       "Drawcall Generation Command Buffer");
+  m_computeProfilerContext = GPUProfilerContext(
+      m_renderer, *m_renderer->getComputeQueue(), m_commandBufferCompute);
+
   m_commandBuffer = m_renderer->getCommandBuffer();
-  registerDebugMarker(device, m_commandBuffer, "Block Rendering Command Buffer");
+  registerDebugMarker(device, m_commandBuffer,
+                      "Block Rendering Command Buffer");
+  m_renderingProfilerContext = GPUProfilerContext(
+      m_renderer, *m_renderer->getGraphicsQueue(), m_commandBuffer);
 
   m_drawCallGenerationFinished =
       vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
@@ -220,13 +234,17 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   m_renderingFinished = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
   registerDebugMarker(device, m_renderingFinished, "Block rendering finished");
 
+  m_cullingData = m_renderer->createBuffer(
+      sizeof(CullingData), vk::BufferUsageFlagBits::eUniformBuffer,
+      "Culling Data");
+
   recompileShadersIfNecessary(true);
 }
 
 void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
                                      TimeSpan dt, bool cameraMoved,
-                                     glm::vec3 cameraPosition) {
-  OPTICK_EVENT();
+                                     Camera* camera) {
+  ZoneScoped;
   const auto& device = m_renderer->getDevice();
 
   recompileShadersIfNecessary();
@@ -236,32 +254,39 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
     recreatePipeline();
   }
 
-  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
-  u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
+  const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+  const u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
 
-  bool requiresChunkDataUpdate = updateBlockWorldData(cameraPosition);
+  const bool requiresChunkDataUpdate = updateBlockWorldData(camera->getPosition());
 
-  auto extent = m_renderer->getExtent();
-  bool submitCompute = m_config->everyFrameGenerateDrawCalls || cameraMoved ||
+  const auto extent = m_renderer->getExtent();
+  const bool submitCompute = m_config->everyFrameGenerateDrawCalls || cameraMoved ||
                        requiresChunkDataUpdate;
   if (submitCompute) {
+    updateCullingData(camera);
+
     std::array<const u32, 4> empty{36u, 0u, 0u, 0u};
     copyToDevice<u32>(m_drawCommandBuffer.deviceMemory, std::span(empty));
 
     m_commandBufferCompute.reset();
-    m_commandBufferCompute.begin(vk::CommandBufferBeginInfo());
-    //OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBufferCompute));
-    //OPTICK_GPU_EVENT("Compute Draw Calls");
-    m_commandBufferCompute.bindPipeline(vk::PipelineBindPoint::eCompute,
-                                        *m_computePipeline);
-    m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-                                              *m_pipelineLayout, 0u,
-                                              {*m_descriptorSet}, nullptr);
-    m_commandBufferCompute.dispatch(workGroupCount, BlockWorld::chunkHeight, 1);
+    {
+      m_commandBufferCompute.begin(vk::CommandBufferBeginInfo());
+      TracyVkZone(m_computeProfilerContext.context, *m_commandBufferCompute,
+                  "Generate Draw Calls");
+      TracyVkCollect(m_computeProfilerContext.context, *m_commandBufferCompute);
+
+      m_commandBufferCompute.bindPipeline(vk::PipelineBindPoint::eCompute,
+                                          *m_computePipeline);
+      m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
+                                                *m_pipelineLayout, 0u,
+                                                {*m_descriptorSet}, nullptr);
+      m_commandBufferCompute.dispatch(workGroupCount, BlockWorld::chunkHeight,
+                                      1);
+    }
     m_commandBufferCompute.end();
 
-    auto computeQueue = m_renderer->getComputeQueue();
-    vk::SubmitInfo computeInfo{
+    const auto computeQueue = m_renderer->getComputeQueue();
+    const vk::SubmitInfo computeInfo{
         {}, {}, *m_commandBufferCompute, *m_drawCallGenerationFinished};
     computeQueue.submit(computeInfo);
   }
@@ -272,35 +297,39 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
     clearValues[1].depthStencil = vk::ClearDepthStencilValue(0.0f, 0);
 
     const auto& pass = m_renderer->getRenderPass();
-    vk::RenderPassBeginInfo renderPassBeginInfo(
+    const vk::RenderPassBeginInfo renderPassBeginInfo(
         *pass, *frameBuffer, vk::Rect2D(vk::Offset2D(0, 0), extent),
         clearValues);
 
     m_commandBuffer.reset();
-    m_commandBuffer.begin(vk::CommandBufferBeginInfo());
-    //OPTICK_GPU_CONTEXT(static_cast<VkCommandBuffer>(*m_commandBuffer));
-    //OPTICK_GPU_EVENT("Render Blocks");
-    m_commandBuffer.beginRenderPass(renderPassBeginInfo,
-                                    vk::SubpassContents::eInline);
-    m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                 *m_graphicsPipeline);
-    m_commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                       *m_pipelineLayout, 0, {*m_descriptorSet},
-                                       nullptr);
+    {
+      m_commandBuffer.begin(vk::CommandBufferBeginInfo());
+      TracyVkZone(m_renderingProfilerContext.context, *m_commandBuffer,
+                  "Draw Blocks");
+      TracyVkCollect(m_renderingProfilerContext.context, *m_commandBuffer);
 
-    m_commandBuffer.bindVertexBuffers(0, {*m_vertexBuffer.buffer}, {0});
+      m_commandBuffer.beginRenderPass(renderPassBeginInfo,
+                                      vk::SubpassContents::eInline);
+      m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
+                                   *m_graphicsPipeline);
+      m_commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
+                                         *m_pipelineLayout, 0,
+                                         {*m_descriptorSet}, nullptr);
 
-    m_commandBuffer.setViewport(
-        0, vk::Viewport(0.0f, 0.0f, static_cast<float>(extent.width),
-                        static_cast<float>(extent.height), 1.0f, 0.0f));
-    m_commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), extent));
-    m_commandBuffer.drawIndirect(*m_drawCommandBuffer.buffer, 0u, 1u,
-                                 sizeof(u32) * 4);
+      m_commandBuffer.bindVertexBuffers(0, {*m_vertexBuffer.buffer}, {0});
 
-    m_commandBuffer.endRenderPass();
+      m_commandBuffer.setViewport(
+          0, vk::Viewport(0.0f, 0.0f, static_cast<float>(extent.width),
+                          static_cast<float>(extent.height), 1.0f, 0.0f));
+      m_commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), extent));
+      m_commandBuffer.drawIndirect(*m_drawCommandBuffer.buffer, 0u, 1u,
+                                   sizeof(u32) * 4);
+
+      m_commandBuffer.endRenderPass();
+    }
     m_commandBuffer.end();
 
-    auto graphicsQueue = m_renderer->getGraphicsQueue();
+    const auto graphicsQueue = m_renderer->getGraphicsQueue();
 
     vk::SubmitInfo graphicsInfo{{}, {}, *m_commandBuffer, *m_renderingFinished};
     if (submitCompute) {
@@ -321,26 +350,26 @@ vk::raii::Semaphore& BlockRenderingModule::getRenderingFinishedSemaphore() {
 void BlockRenderingModule::recreatePipeline() {
   m_renderer->waitIdle();
 
-  std::array<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>, 9>
+  std::array
       layout{
 
           // projection
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          std::tuple{
               vk::DescriptorType::eUniformBuffer, 1u,
               vk::ShaderStageFlagBits::eVertex |
                   vk::ShaderStageFlagBits::eCompute},
           // view
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          std::tuple{
               vk::DescriptorType::eUniformBuffer, 1u,
               vk::ShaderStageFlagBits::eVertex |
                   vk::ShaderStageFlagBits::eCompute},
           // transform
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          std::tuple{
               vk::DescriptorType::eStorageBuffer, 1u,
               vk::ShaderStageFlagBits::eVertex |
                   vk::ShaderStageFlagBits::eCompute},
           // block type
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          std::tuple{
               vk::DescriptorType::eStorageBuffer, 1u,
               vk::ShaderStageFlagBits::eVertex |
                   vk::ShaderStageFlagBits::eCompute},
@@ -360,13 +389,17 @@ void BlockRenderingModule::recreatePipeline() {
           std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
               vk::DescriptorType::eStorageBuffer, 1u,
               vk::ShaderStageFlagBits::eCompute},
+          // culling data
+          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+              vk::DescriptorType::eUniformBuffer, 1u,
+              vk::ShaderStageFlagBits::eCompute},
           // texture sampler
           std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
               vk::DescriptorType::eCombinedImageSampler, 1,
               vk::ShaderStageFlagBits::eFragment}};
 
-  std::array<vk::DescriptorPoolSize, 3u> sizes{
-      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 3u},
+  std::array sizes{
+      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 4u},
       vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 5u},
       vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1u}};
 
@@ -405,9 +438,7 @@ void BlockRenderingModule::recreatePipeline() {
       m_renderer->getGlobalBuffer(GlobalBuffers::CameraView);
   assert(viewBuffer);
 
-  std::array<std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>,
-             8u>
+  std::array
       update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
                         vk::DeviceSize, const vk::raii::BufferView*>{
                  vk::DescriptorType::eUniformBuffer, *projectionClipBuffer,
@@ -439,6 +470,10 @@ void BlockRenderingModule::recreatePipeline() {
              std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
                         vk::DeviceSize, const vk::raii::BufferView*>{
                  vk::DescriptorType::eStorageBuffer, m_chunkRemapIndex.buffer,
+                 VK_WHOLE_SIZE, nullptr},
+             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                        vk::DeviceSize, const vk::raii::BufferView*>{
+                 vk::DescriptorType::eUniformBuffer, m_cullingData.buffer,
                  VK_WHOLE_SIZE, nullptr}};
 
   updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
@@ -479,18 +514,18 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
 
   if (anyUpdated) {
     recreatePipeline();
-    std::cout << "Succesfully recompiled shaders and recreated the pipeline "
+    std::cout << "Successfully recompiled shaders and recreated the pipeline "
                  "for the block rendering module.\n";
   }
 }
 void BlockRenderingModule::recreateBlockDependentBuffers() {
-  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
-  u32 blockCountAllLoadedChunks = BlockWorld::perChunkBlockCount *
+    const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+    const u32 blockCountAllLoadedChunks = BlockWorld::perChunkBlockCount *
                                   oneDimensionChunkCount *
                                   oneDimensionChunkCount;
 
   m_transformBuffer = m_renderer->createBuffer(
-      blockCountAllLoadedChunks * sizeof(glm::vec4),
+      blockCountAllLoadedChunks * sizeof(v4),
       vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
@@ -522,24 +557,27 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
   m_chunkRemapIndex = m_renderer->createBuffer(
       oneDimensionChunkCount * oneDimensionChunkCount * sizeof(u32),
       vk::BufferUsageFlagBits::eStorageBuffer, "Chunk Remap Index");
+
   loadCountChunksLastFrame = m_config->loadCountChunks;
 }
-bool BlockRenderingModule::updateBlockWorldData(glm::vec3 cameraPosition) {
-  u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+
+bool BlockRenderingModule::updateBlockWorldData(v3 cameraPosition) {
+  ZoneScoped;
+  const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
   u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
 
-  glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
+  const glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
                          cameraPosition.z / BlockWorld::chunkLocalSize};
 
-  glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
+  const glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
                  cameraChunk.y - m_config->loadCountChunks};
-  glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
+  const glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
                  cameraChunk.y + m_config->loadCountChunks};
 
   bool chunkDirty = false;
   for (i32 z = min.y; z <= max.y; ++z) {
     for (i32 x = min.x; x <= max.x; ++x) {
-      glm::ivec2 chunk{x, z};
+        const glm::ivec2 chunk{x, z};
       if (m_blockWorld->isRenderingDirty(chunk)) {
         chunkDirty = true;
         m_blockWorld->clearRenderingDirty(chunk);
@@ -547,7 +585,7 @@ bool BlockRenderingModule::updateBlockWorldData(glm::vec3 cameraPosition) {
     }
   }
 
-  bool requiresChunkDataUpdate = cameraChunk != m_cameraChunkLastFrame ||
+  const bool requiresChunkDataUpdate = cameraChunk != m_cameraChunkLastFrame ||
                                  !m_allChunksUploadedLastFrame || chunkDirty;
 
   if (requiresChunkDataUpdate) {
@@ -556,14 +594,14 @@ bool BlockRenderingModule::updateBlockWorldData(glm::vec3 cameraPosition) {
 
     std::vector<u32> remapIndex;
     remapIndex.reserve(workGroupCount);
-    std::vector<BlockType> blockData(
+    std::vector blockData(
         BlockWorld::perChunkBlockCount * workGroupCount, BlockWorld::air);
 
     u32 counter = 0u;
     for (i32 z = min.y; z <= max.y; ++z) {
       for (i32 x = min.x; x <= max.x; ++x) {
-        glm::ivec2 chunk{x, z};
-        auto state = m_blockWorld->requestChunk(chunk);
+          const glm::ivec2 chunk{x, z};
+          const auto state = m_blockWorld->requestChunk(chunk);
         if (state != BlockWorld::ChunkState::FinishedGeneration) {
           m_allChunksUploadedLastFrame = false;
           ++counter;
@@ -587,5 +625,59 @@ bool BlockRenderingModule::updateBlockWorldData(glm::vec3 cameraPosition) {
   }
 
   return requiresChunkDataUpdate;
+}
+
+namespace {
+Plane convertToPlane(v3 p1, v3 normal) {
+  Plane p;
+  p.normal = glm::normalize(normal);
+  p.distance = glm::dot(p.normal, p1);
+  return p;
+}
+float getSignedDistanceToPlane(const Plane& plane, const v3& point) {
+  return glm::dot(plane.normal, point) - plane.distance;
+}
+}  // namespace
+
+void BlockRenderingModule::updateCullingData(const Camera* camera) const
+{
+  ZoneScoped;
+
+  const float zNear = m_config->nearPlane;
+  const float zFar = m_config->farPlane;
+    
+  const v3 forward = camera->getForward();
+  const v3 up = camera->getUp();
+  const v3 right = camera->getRight();
+
+  constexpr float fov = glm::radians(60.0f);
+  constexpr float aspect = 1920 / 1017;
+
+  const float halfVSide = zFar * tanf(fov);
+  const float halfHSide = halfVSide * aspect;
+  const v3 frontMultFar = zFar * forward;
+
+  CullingData data;
+  data.cullingEnabled = m_config->cullingEnabled;
+
+  const v3 cameraPosition = camera->getPosition();
+  data.frustum[0] =
+      convertToPlane(cameraPosition + zNear * forward, forward);
+  data.frustum[1] = convertToPlane(cameraPosition + frontMultFar, -forward);
+  data.frustum[2] = convertToPlane(
+      cameraPosition,
+      glm::cross(frontMultFar - right * halfHSide, up));
+  data.frustum[3] = convertToPlane(
+      cameraPosition,
+      glm::cross(up, frontMultFar + right * halfHSide));
+  data.frustum[4] = convertToPlane(
+      cameraPosition,
+      glm::cross(right, frontMultFar - up * halfVSide));
+  data.frustum[5] = convertToPlane(
+      cameraPosition,
+      glm::cross(frontMultFar + up * halfVSide, right));
+
+  copyToDevice(m_cullingData.deviceMemory,
+               std::span<const CullingData>(&data, 1u));
 }
 }  // namespace dnm

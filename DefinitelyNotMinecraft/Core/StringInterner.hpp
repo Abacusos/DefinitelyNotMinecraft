@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "Handle.hpp"
+#include <Core/Handle.hpp>
 
 namespace dnm {
 
@@ -18,7 +18,7 @@ class StringInterner {
         return InternedString{.index = i};
       };
     }
-    m_strings.emplace_back(std::string(toBeAddedString));
+    m_strings.emplace_back(toBeAddedString);
     return InternedString{.index = static_cast<u32>(m_strings.size() - 1)};
   };
 

@@ -1,8 +1,10 @@
-#include "Imgui.hpp"
+#include <Logic/Imgui.hpp>
 
-#include "Camera.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
+
+#include <Core/Profiler.hpp>
+#include <Logic/Camera.hpp>
 
 namespace dnm {
 Imgui::Imgui(Config* config, GLFWwindow* window) : m_config{config} {
@@ -23,30 +25,37 @@ Imgui::~Imgui() {
   ImGui::DestroyContext();
 }
 
-void Imgui::logicFrame(TimeSpan dt, Camera* camera) {
+void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const
+{
+  ZoneScoped;
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
 
   ImGuiIO& io = ImGui::GetIO();
 
-  ImGui::Begin("Definitely not minecraft");
+  if (m_config->disableImgui) {
+    ImGui::Begin("Definitely not minecraft");
 
-  ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
-              1000.0f / io.Framerate, io.Framerate);
+    ImGui::Text("Application average %.3f ms/frame (%.1f FPS)",
+                1000.0f / io.Framerate, io.Framerate);
 
-  auto position = camera->getPosition();
-  ImGui::Text("Camera position %.1f %.1f %.1f", position.x, position.y,
-              position.z);
-  auto rotation = camera->getRotation();
-  ImGui::Text("Camera rotation %.1f %.1f %.1f", rotation.x, rotation.y,
-              rotation.z);
-    
-  ImGui::Text("Modification mode %d", m_config->insertionMode);
+    const auto position = camera->getPosition();
+    ImGui::Text("Camera position %.1f %.1f %.1f", position.x, position.y,
+                position.z);
+    const auto rotation = camera->getForward();
+    ImGui::Text("Camera forward %.1f %.1f %.1f", rotation.x, rotation.y,
+                rotation.z);
 
+    ImGui::Text("Modification mode %d", m_config->insertionMode);
 
-  ImGui::Checkbox("Generate draw calls every frame",
-                &m_config->everyFrameGenerateDrawCalls);
+    ImGui::Checkbox("Generate draw calls every frame",
+                    &m_config->everyFrameGenerateDrawCalls);
 
-  ImGui::End();
+    ImGui::Checkbox("Culling enabled", &m_config->cullingEnabled);
+
+    ImGui::Checkbox("Limit frames", &m_config->limitFrames);
+
+    ImGui::End();
+  }
 }
 }  // namespace dnm

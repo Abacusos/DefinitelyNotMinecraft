@@ -2,13 +2,13 @@
 
 #include <atomic>
 #include <filesystem>
+#include <mutex>
 #include <span>
-#include <unordered_map>
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
 
-#include "ReflectedShader.hpp"
-#include "ShaderReflector.hpp"
+#include <Shader/ReflectedShader.hpp>
+#include <Shader/ShaderReflector.hpp>
 
 namespace dnm {
 class StringInterner;
@@ -28,7 +28,7 @@ class ShaderManager {
 
   std::optional<vk::raii::ShaderModule> getCompiledVersion(
       const vk::raii::Device& device, ShaderHandle handle,
-      std::span<Define> defines);
+      std::span<Define> defines) const;
 
   bool wasContentUpdated(ShaderHandle handle);
 

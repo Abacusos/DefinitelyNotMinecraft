@@ -1,5 +1,7 @@
 
 #extension GL_EXT_shader_8bit_storage : require
+#extension GL_KHR_shader_subgroup_ballot: enable
+#extension GL_KHR_shader_subgroup_arithmetic: enable
 
 struct DrawCall
 {
@@ -9,12 +11,12 @@ struct DrawCall
       uint firstInstance;
 };
 
-layout (std140, binding = 0) uniform projectionBuffer
+layout (std140, binding = 0) readonly uniform projectionBuffer
 {
     mat4 projection;
 };
 
-layout (std140, binding = 1) uniform viewBuffer
+layout (std140, binding = 1) readonly uniform viewBuffer
 {
     mat4 view;
     vec4 cameraPos;
@@ -25,14 +27,14 @@ layout (std140, binding = 2) buffer transformBuffer
     vec4 transforms[];
 };
 
-layout (std430, binding = 4) readonly buffer worldDataBuffer
-{
-    uint8_t blockTypeWorld[];
-};
-
 layout (std430, binding = 3) buffer blockTypeBuffer
 {
     uint8_t blockType[];
+};
+
+layout (std430, binding = 4) readonly buffer worldDataBuffer
+{
+    uint8_t blockTypeWorld[];
 };
 
 layout (binding = 5) buffer drawCallBuffer
@@ -40,7 +42,7 @@ layout (binding = 5) buffer drawCallBuffer
     DrawCall drawcall;
 };
 
-layout (binding = 6) uniform chunkConstants
+layout (binding = 6) readonly uniform chunkConstants
 {
     int chunkLoadCount;
     int chunksOneDimension;
@@ -48,9 +50,21 @@ layout (binding = 6) uniform chunkConstants
     int chunkHeight;
 };
 
-layout (binding = 7) buffer chunkIndexRemap
+layout (binding = 7) readonly buffer chunkIndexRemap
 {
     uint remapIndex[];
+};
+
+struct Plane
+{
+    vec3 normal;
+    float dist;
+};
+
+layout (binding = 8) readonly uniform cullingData
+{
+	Plane planes[6];
+	uint cullingEnabled;
 };
 
 vec3 indexToPos()
@@ -82,6 +96,25 @@ uint toFlatIndex()
   return offsetPreviousChunk + heightOffset + inLayerOffset;
 }
 
+float getSignedDistanceToPlane(const vec3 point, const Plane plane)
+{
+    return dot(plane.normal, point) - plane.dist;
+}
+
+bool isVisible(vec3 center, float extent)
+{
+	bool visible = true;
+
+    for(int i = 0; i < 6; ++i)
+    {	
+        const float r = dot(abs(planes[i].normal), vec3(extent));
+        visible = visible && -r <= getSignedDistanceToPlane(center, planes[i]);
+    }
+
+	visible = visible || cullingEnabled == 0;
+    return visible;
+}
+
 layout (local_size_x = LOCAL_SIZE_X, local_size_y = LOCAL_SIZE_Y, local_size_z = LOCAL_SIZE_Z) in;
 
 uint highestBitSet = uint(128);
@@ -98,45 +131,25 @@ void main()
   
   vec3 position = indexToPos();
 
-  int x = int(position.x);
-  int y = int(position.y);
-  int z = int(position.z);
+  uint instanceVisible = isVisible(vec3(position.x + 0.5f, position.y + 0.5f, position.z + 0.5f), 0.5f) ? 1 : 0;
 
-  int endX = x + 1;
-  int endZ = z + 1;
-  int endY = y + 1;
+  uint localIndex = subgroupExclusiveAdd(instanceVisible);
 
-  // A naive version of frustum culling
-  const vec4 corners[8] = vec4[8](
-    vec4(x, y, z, 1.0f),
-    vec4(endX, y, z, 1.0f),
-    vec4(x, endY, z, 1.0f),
-    vec4(endX, endY, z, 1.0f),
-    vec4(x, y, endZ, 1.0f),
-    vec4(endX, y, endZ, 1.0f),
-    vec4(x, endY, endZ, 1.0f),
-    vec4(endX, endY, endZ, 1.0f)
-    );    
+  uint highestActiveID = subgroupBallotFindMSB(subgroupBallot(true));
+  uint globalIndex = 0;
 
-  mat4 pv = projection * view;
-  bool chunkVisible = false;
-  for(int i=0;i<8;++i)
-  {
-    vec4 corner = pv * corners[i];
-    bool xIsIn = -corner.w <= corner.x && corner.x <= corner.w;
-    bool yIsIn = -corner.w <= corner.y && corner.y <= corner.w;
-    bool zIsIn = 0.0f <= corner.z && corner.z <= corner.w;
-    chunkVisible = chunkVisible || (xIsIn && yIsIn && zIsIn);
-  } 
+    // If we're the highest active ID
+  if (highestActiveID == gl_SubgroupInvocationID) {
+    // We need to carve out a slice of out_triangles for our triangle
+    uint localSize = localIndex + instanceVisible;
 
-  if(!chunkVisible)
-  {
-    return;
+    globalIndex = atomicAdd(drawcall.instanceCount, localSize);
   }
+  
+  globalIndex = subgroupMax(globalIndex);
 
-  uint localWriteIndex = atomicAdd(drawcall.instanceCount, 1u);
-
-  blockType[localWriteIndex] = uint8_t(block);
-
-  transforms[localWriteIndex] = vec4(x, y, z, 1.0f); 
+  if(instanceVisible > 0){
+      blockType[globalIndex + localIndex] = uint8_t(block);
+      transforms[globalIndex + localIndex] = vec4(position.x, position.y, position.z, 1.0f); 
+  }
 }

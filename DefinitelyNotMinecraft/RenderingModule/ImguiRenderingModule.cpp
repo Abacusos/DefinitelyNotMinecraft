@@ -1,16 +1,16 @@
-#include "ImguiRenderingModule.hpp"
+#include <Core/Config.hpp>
+#include <Core/Profiler.hpp>
+#include <RenderingModule/ImguiRenderingModule.hpp>
 
-#include "Config.hpp"
 #include "imgui.h"
 #include "imgui_impl_vulkan.h"
-#include "optick.h"
 
 namespace dnm {
 ImguiRenderingModule::ImguiRenderingModule(Config* config, Renderer* renderer)
     : m_config{config}, m_renderer{renderer} {
   const auto& device = m_renderer->getDevice();
 
-  std::array<vk::DescriptorPoolSize, 11u> sizes{
+  std::array sizes{
       vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 1000u},
       vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000u},
       vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 1000u},
@@ -57,7 +57,7 @@ ImguiRenderingModule::~ImguiRenderingModule() { ImGui_ImplVulkan_Shutdown(); }
 
 void ImguiRenderingModule::drawFrame(
     const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
-    const vk::raii::Semaphore& previousRenderStepFinished) {
+    const vk::raii::Semaphore& previousRenderStepFinished) const {
   ImGui_ImplVulkan_NewFrame();
 
   ImGui::Render();
@@ -65,13 +65,13 @@ void ImguiRenderingModule::drawFrame(
   const bool is_minimized =
       (draw_data->DisplaySize.x <= 0.0f || draw_data->DisplaySize.y <= 0.0f);
   if (!is_minimized) {
-    auto extent = m_renderer->getExtent();
+    const auto extent = m_renderer->getExtent();
 
     std::array<vk::ClearValue, 2> clearValues;
     clearValues[0].color = vk::ClearColorValue(0.45f, 0.55f, 0.60f, 0.2f);
     clearValues[1].depthStencil = vk::ClearDepthStencilValue(0.0f, 0);
 
-    vk::RenderPassBeginInfo renderPassBeginInfo(
+    const vk::RenderPassBeginInfo renderPassBeginInfo(
         *m_renderPass, *frameBuffer, vk::Rect2D(vk::Offset2D(0, 0), extent),
         clearValues);
 
@@ -91,14 +91,14 @@ void ImguiRenderingModule::drawFrame(
     m_commandBuffer.endRenderPass();
     m_commandBuffer.end();
 
-    auto graphicsQueue = m_renderer->getGraphicsQueue();
+    const auto graphicsQueue = m_renderer->getGraphicsQueue();
 
     vk::PipelineStageFlags waitDestinationStageMask(
         vk::PipelineStageFlagBits::eColorAttachmentOutput);
 
-    vk::SubmitInfo graphicsInfo{*previousRenderStepFinished,
-                                waitDestinationStageMask, *m_commandBuffer,
-                                *m_renderingFinished};
+    const vk::SubmitInfo graphicsInfo{*previousRenderStepFinished,
+                                      waitDestinationStageMask,
+                                      *m_commandBuffer, *m_renderingFinished};
     graphicsQueue.submit(graphicsInfo);
   }
 }
@@ -110,7 +110,7 @@ vk::raii::Semaphore& ImguiRenderingModule::getRenderingFinishedSemaphore() {
 void ImguiRenderingModule::recreatePipeline() { m_renderer->waitIdle(); }
 
 void ImguiRenderingModule::uploadFontTexture() {
-  ImGuiIO& io = ImGui::GetIO();
+  const ImGuiIO& io = ImGui::GetIO();
 
   unsigned char* pixels;
   int width, height;
@@ -133,10 +133,9 @@ void ImguiRenderingModule::uploadFontTexture() {
     m_fontTexture.setImage(commandBuffer, pixels);
   });
 
-  std::array<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>, 1>
-      layout{std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eCombinedImageSampler, 1,
-          vk::ShaderStageFlagBits::eFragment}};
+  std::array layout{std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+      vk::DescriptorType::eCombinedImageSampler, 1,
+      vk::ShaderStageFlagBits::eFragment}};
 
   m_descriptorSet.clear();
 

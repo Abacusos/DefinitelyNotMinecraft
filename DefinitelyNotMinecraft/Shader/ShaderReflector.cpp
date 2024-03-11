@@ -1,9 +1,8 @@
-#include "ShaderReflector.hpp"
+#include <Shader/ShaderReflector.hpp>
 
+#include <Core/StringInterner.hpp>
 #include <array>
 #include <cassert>
-
-#include "StringInterner.hpp"
 
 namespace dnm {
 
@@ -15,7 +14,7 @@ constexpr std::array<std::string_view, 3u> searchTokens = {
 ShaderReflector::ShaderReflector(StringInterner* interner)
     : m_interner{interner} {}
 
-ReflectedShader ShaderReflector::reflectShader(std::string_view view) {
+ReflectedShader ShaderReflector::reflectShader(std::string_view view) const {
   // Tokenize stream
   std::vector<std::string_view> tokenized;
   // Hard to guess the number of tokens here

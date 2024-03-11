@@ -1,18 +1,15 @@
-#include "Camera.hpp"
+#include <Logic/Camera.hpp>
 
-#include <iostream>
+#include <Core/Formatter.hpp>
 
 namespace dnm {
 
 namespace {
-
-glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
 struct BufferContent {
-  glm::mat4x4 viewMatrix;
-  glm::vec4 cameraPosition;
+  m4 viewMatrix;
+  v4 cameraPosition;
 };
-}
+}  // namespace
 
 Camera::Camera(Config* config, Renderer* renderer) : m_config{config} {
   m_viewBuffer = renderer->createBuffer(sizeof(BufferContent),
@@ -20,35 +17,37 @@ Camera::Camera(Config* config, Renderer* renderer) : m_config{config} {
                                         "View Matrix");
   m_viewBufferRegistration =
       renderer->registerRAIIBuffer(GlobalBuffers::CameraView, m_viewBuffer);
+
+  updateViewMatrix();
 }
 
 void Camera::processKeyboard(CameraMovement direction, TimeSpan deltaTime) {
-  if (direction == Camera::CameraMovement::FORWARD) m_forward = 1.0f;
-  if (direction == Camera::CameraMovement::BACKWARD) m_forward = -1.0f;
-  if (direction == Camera::CameraMovement::LEFT) m_side = -1.0f;
-  if (direction == Camera::CameraMovement::RIGHT) m_side = 1.0f;
+  if (direction == CameraMovement::FORWARD) m_forward = 1.0f;
+  if (direction == CameraMovement::BACKWARD) m_forward = -1.0f;
+  if (direction == CameraMovement::LEFT) m_side = -1.0f;
+  if (direction == CameraMovement::RIGHT) m_side = 1.0f;
+  if (direction == CameraMovement::DOWN) m_up = -1.0f;
+  if (direction == CameraMovement::UP) m_up = 1.0f;
 
   m_dirty = true;
 }
 
-void Camera::processMouseMovement(float xoffset, float yoffset,
-                                  bool constrainPitch) {
+void Camera::processMouseMovement(float xoffset, float yoffset) {
   m_accumulatedXChange += xoffset;
   m_accumulatedYChange += yoffset;
   m_dirty = true;
 }
 
 bool Camera::update(TimeSpan deltaTime) {
+  ZoneScoped;
   if (!m_dirty) {
     return false;
   }
 
-  float moveSpeed = deltaTime.count() * m_movementSpeed * 2.0f;
-  float rotSpeed = deltaTime.count() * m_rotationSpeed * 50.0f;
+  float rotSpeed = deltaTime.count() * m_rotationSpeed;
 
-  m_rotation.y += m_accumulatedXChange * rotSpeed;
+  m_rotation.y += -m_accumulatedXChange * rotSpeed;
   m_rotation.x += m_accumulatedYChange * rotSpeed;
-
   if (m_rotation.x > 89.0f) {
     m_rotation.x = 89.0f;
   }
@@ -56,19 +55,21 @@ bool Camera::update(TimeSpan deltaTime) {
     m_rotation.x = -89.0f;
   }
 
-  glm::vec3 direction;
-  direction.x = cos(glm::radians(m_rotation.y)) * cos(glm::radians(m_rotation.x));
-  direction.y = -sin(glm::radians(m_rotation.x));
-  direction.z = sin(glm::radians(m_rotation.y)) * cos(glm::radians(m_rotation.x));
-  glm::vec3 cameraFront = glm::normalize(direction);
+  float moveSpeed = deltaTime.count() * m_movementSpeed;
 
-  m_position += (moveSpeed * cameraFront) * m_forward;
-  m_position +=
-      (glm::normalize(glm::cross(cameraFront, cameraUp)) * rotSpeed) * m_side;
+  const v3 forward = getForward();
+  const v3 up = getUp();
+  const v3 right = getRight();
+
+  m_position += forward * moveSpeed * m_forward;
+  m_position += up * moveSpeed * m_up;
+  m_position += right * moveSpeed * m_side;
+
+  updateViewMatrix();
 
   BufferContent content;
-  content.viewMatrix = glm::lookAt(m_position, m_position + cameraFront, cameraUp);
-  content.cameraPosition = glm::vec4(m_position, 1.0f);
+  content.viewMatrix = m_viewMatrix;
+  content.cameraPosition = v4(m_position, 1.0f);
 
   copyToDevice(m_viewBuffer.deviceMemory,
                std::span<const BufferContent>(&content, 1u));
@@ -79,8 +80,33 @@ bool Camera::update(TimeSpan deltaTime) {
 
   m_forward = 0.0f;
   m_side = 0.0f;
+  m_up = 0.0f;
 
   return true;
+}
+
+v3 Camera::getForward() const {
+  // The camera is facing at -negative z, so negate here
+  return -normalize(v3(m_cameraTransform[2]));
+}
+
+v3 Camera::getUp() const { return normalize(v3(m_cameraTransform[1])); }
+
+v3 Camera::getRight() const { return normalize(v3(m_cameraTransform[0])); }
+
+v3 Camera::getPosition() const { return m_position; }
+
+m4 Camera::getViewMatrix() const { return m_viewMatrix; }
+
+void Camera::updateViewMatrix() {
+  m_cameraTransform = mat4_cast(
+      glm::quat(v3(glm::radians(m_rotation.x), glm::radians(m_rotation.y),
+                   glm::radians(m_rotation.z))));
+
+  m4 translation = glm::identity<m4>();
+  translation = translate(translation, m_position);
+  m_cameraTransform = translation * m_cameraTransform;
+  m_viewMatrix = inverse(m_cameraTransform);
 }
 
 }  // namespace dnm

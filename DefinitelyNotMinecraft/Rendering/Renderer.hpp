@@ -1,13 +1,12 @@
 #pragma once
 
+#include <Core/Chrono.hpp>
+#include <Core/Config.hpp>
+#include <Core/GLMInclude.hpp>
+#include <Rendering/GlobalBuffers.hpp>
+#include <Rendering/RAIIUtils.hpp>
 #include <functional>
 #include <vulkan/vulkan_raii.hpp>
-
-#include "Chrono.hpp"
-#include "GlobalBuffers.hpp"
-#include "RAIIUtils.hpp"
-#include "GLMInclude.hpp"
-#include "Config.hpp"
 
 namespace dnm {
 
@@ -17,7 +16,6 @@ class Renderer {
  public:
   explicit Renderer(Config* config);
   ~Renderer();
-
 
   u32 prepareDrawFrame();
   void finishDrawFrame(vk::raii::Semaphore& finishedRendering, u32 imageIndex);
@@ -42,31 +40,30 @@ class Renderer {
   };
   FamilyIndices getIndices() const;
 
-  vk::raii::CommandBuffer getCommandBuffer();
-  dnm::BufferData createBuffer(vk::DeviceSize size, vk::BufferUsageFlags flags,
-                               std::string_view debugName,
-                               vk::MemoryPropertyFlags propertyFlags =
-                                   vk::MemoryPropertyFlagBits::eHostVisible |
-                                   vk::MemoryPropertyFlagBits::eHostCoherent);
+  vk::raii::CommandBuffer getCommandBuffer() const;
+  BufferData createBuffer(vk::DeviceSize size, vk::BufferUsageFlags flags,
+                          std::string_view debugName,
+                          vk::MemoryPropertyFlags propertyFlags =
+                              vk::MemoryPropertyFlagBits::eHostVisible |
+                              vk::MemoryPropertyFlagBits::eHostCoherent) const;
 
-  std::unique_ptr<dnm::BufferRegistration> registerRAIIBuffer(
+  std::unique_ptr<BufferRegistration> registerRAIIBuffer(
       GlobalBuffers bufferIdentifier, const BufferData& buffer);
   void registerBuffer(GlobalBuffers bufferIdentifier, const BufferData& buffer);
   void removeBufferRegistration(GlobalBuffers bufferIdentifier);
-  const vk::raii::Buffer* getGlobalBuffer(GlobalBuffers bufferIdentifier);
+  const vk::raii::Buffer* getGlobalBuffer(GlobalBuffers bufferIdentifier) const;
 
   void oneTimeSubmit(
       std::function<void(const vk::raii::CommandBuffer& commandBuffer)>
-          function);
+          function) const;
 
-  void waitIdle();
+  void waitIdle() const;
+
+  m4 getProjectionMatrix() const;
 
  private:
   void recreateSwapChainFromWindow();
   void recreateSwapChain();
-
-  glm::mat4x4 createProjectionMatrix(const vk::Extent2D& extent, float n,
-                                     float f);
 
  private:
   Config* m_config;
@@ -75,14 +72,14 @@ class Renderer {
   vk::raii::Instance m_instance{nullptr};
   vk::raii::PhysicalDevice m_physicalDevice{nullptr};
   FamilyIndices m_familyIndices;
-  dnm::SurfaceData m_surfaceData{nullptr};
+  SurfaceData m_surfaceData{nullptr};
   vk::raii::Device m_device{nullptr};
   vk::raii::CommandPool m_commandPool{nullptr};
   vk::raii::Queue m_computeQueue{nullptr};
   vk::raii::Queue m_graphicsQueue{nullptr};
   vk::raii::Queue m_presentQueue{nullptr};
-  dnm::SwapChainData m_swapChainData{nullptr};
-  dnm::DepthBufferData m_depthBufferData{nullptr};
+  SwapChainData m_swapChainData{nullptr};
+  DepthBufferData m_depthBufferData{nullptr};
   vk::raii::RenderPass m_renderPass{nullptr};
   std::vector<vk::raii::Framebuffer> m_framebuffers;
   vk::raii::PipelineCache m_pipelineCache{nullptr};
@@ -100,6 +97,5 @@ class Renderer {
 
   BufferData m_projection{nullptr};
   std::unique_ptr<BufferRegistration> m_projectionClipRegistration{nullptr};
-
 };
 }  // namespace dnm

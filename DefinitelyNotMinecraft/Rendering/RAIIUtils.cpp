@@ -1,6 +1,6 @@
-#include "RAIIUtils.hpp"
+#include <Rendering/RAIIUtils.hpp>
 
-#include "Renderer.hpp"
+#include <Rendering/Renderer.hpp>
 
 namespace dnm {
 vk::raii::DeviceMemory dnm::allocateDeviceMemory(
@@ -8,15 +8,15 @@ vk::raii::DeviceMemory dnm::allocateDeviceMemory(
     vk::PhysicalDeviceMemoryProperties const& memoryProperties,
     vk::MemoryRequirements const& memoryRequirements,
     vk::MemoryPropertyFlags memoryPropertyFlags) {
-  u32 memoryTypeIndex = dnm::findMemoryType(
+  const u32 memoryTypeIndex = findMemoryType(
       memoryProperties, memoryRequirements.memoryTypeBits, memoryPropertyFlags);
-  vk::MemoryAllocateInfo memoryAllocateInfo(memoryRequirements.size,
-                                            memoryTypeIndex);
+  const vk::MemoryAllocateInfo memoryAllocateInfo(memoryRequirements.size,
+                                                  memoryTypeIndex);
   return vk::raii::DeviceMemory(device, memoryAllocateInfo);
 }
 
-dnm::WindowData dnm::createWindow(std::string const& windowName,
-                                  vk::Extent2D const& extent) {
+WindowData dnm::createWindow(std::string const& windowName,
+                             vk::Extent2D const& extent) {
   struct glfwContext {
     glfwContext() {
       glfwInit();
@@ -41,7 +41,7 @@ dnm::WindowData dnm::createWindow(std::string const& windowName,
 u32 dnm::findGraphicsQueueFamilyIndex(
     std::vector<vk::QueueFamilyProperties> const& queueFamilyProperties) {
   // get the first index into queueFamiliyProperties which supports graphics
-  std::vector<vk::QueueFamilyProperties>::const_iterator
+  const std::vector<vk::QueueFamilyProperties>::const_iterator
       graphicsQueueFamilyProperty = std::find_if(
           queueFamilyProperties.begin(), queueFamilyProperties.end(),
           [](vk::QueueFamilyProperties const& qfp) {
@@ -56,12 +56,12 @@ u32 dnm::findGraphicsQueueFamilyIndex(
 std::pair<u32, u32> dnm::findGraphicsAndPresentQueueFamilyIndex(
     vk::raii::PhysicalDevice const& physicalDevice,
     vk::raii::SurfaceKHR const& surface) {
-  std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
+  const std::vector<vk::QueueFamilyProperties> queueFamilyProperties =
       physicalDevice.getQueueFamilyProperties();
   assert(queueFamilyProperties.size() < std::numeric_limits<u32>::max());
 
   u32 graphicsQueueFamilyIndex =
-      dnm::findGraphicsQueueFamilyIndex(queueFamilyProperties);
+      findGraphicsQueueFamilyIndex(queueFamilyProperties);
   if (physicalDevice.getSurfaceSupportKHR(graphicsQueueFamilyIndex, *surface)) {
     return std::make_pair(
         graphicsQueueFamilyIndex,
@@ -69,7 +69,7 @@ std::pair<u32, u32> dnm::findGraphicsAndPresentQueueFamilyIndex(
                                     // also support presents
   }
 
-  // the graphicsQueueFamilyIndex doesn't support present -> look for an other
+  // the graphicsQueueFamilyIndex doesn't support present -> look for another
   // family index that supports both graphics and present
   for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
     if ((queueFamilyProperties[i].queueFlags & vk::QueueFlagBits::eGraphics) &&
@@ -79,7 +79,7 @@ std::pair<u32, u32> dnm::findGraphicsAndPresentQueueFamilyIndex(
   }
 
   // there's nothing like a single family index that supports both graphics and
-  // present -> look for an other family index that supports present
+  // present -> look for another family index that supports present
   for (size_t i = 0; i < queueFamilyProperties.size(); i++) {
     if (physicalDevice.getSurfaceSupportKHR(static_cast<u32>(i), *surface)) {
       return std::make_pair(graphicsQueueFamilyIndex, static_cast<u32>(i));
@@ -96,11 +96,12 @@ u32 findComputeQueueFamilyIndex(
       physicalDevice.getQueueFamilyProperties();
   assert(queueFamilyProperties.size() < std::numeric_limits<u32>::max());
 
-  std::vector<vk::QueueFamilyProperties>::iterator computeQueueFamilyProperty =
-      std::find_if(queueFamilyProperties.begin(), queueFamilyProperties.end(),
-                   [](vk::QueueFamilyProperties const& qfp) {
-                     return qfp.queueFlags & vk::QueueFlagBits::eCompute;
-                   });
+  const std::vector<vk::QueueFamilyProperties>::iterator
+      computeQueueFamilyProperty = std::find_if(
+          queueFamilyProperties.begin(), queueFamilyProperties.end(),
+          [](vk::QueueFamilyProperties const& qfp) {
+            return qfp.queueFlags & vk::QueueFlagBits::eCompute;
+          });
 
   if (computeQueueFamilyProperty != queueFamilyProperties.end()) {
     return static_cast<u32>(std::distance(queueFamilyProperties.begin(),
@@ -110,9 +111,8 @@ u32 findComputeQueueFamilyIndex(
   throw std::runtime_error("Could not find a queue for compute -> terminating");
 }
 
-u32 dnm::findMemoryType(
-    vk::PhysicalDeviceMemoryProperties const& memoryProperties, u32 typeBits,
-    vk::MemoryPropertyFlags requirementsMask) {
+u32 findMemoryType(vk::PhysicalDeviceMemoryProperties const& memoryProperties,
+                   u32 typeBits, vk::MemoryPropertyFlags requirementsMask) {
   u32 typeIndex = u32(~0);
   for (u32 i = 0; i < memoryProperties.memoryTypeCount; i++) {
     if ((typeBits & 1) && ((memoryProperties.memoryTypes[i].propertyFlags &
@@ -132,12 +132,12 @@ vk::raii::Pipeline makeComputePipeline(
     vk::raii::ShaderModule const& computeShaderModule,
     vk::SpecializationInfo const* vertexShaderSpecializationInfo,
     vk::raii::PipelineLayout const& pipelineLayout) {
-  vk::PipelineShaderStageCreateInfo stageCreateInfo(
+  const vk::PipelineShaderStageCreateInfo stageCreateInfo(
       {}, vk::ShaderStageFlagBits::eCompute, *computeShaderModule, "main",
       vertexShaderSpecializationInfo);
 
-  vk::ComputePipelineCreateInfo computeCreateInfo({}, stageCreateInfo,
-                                                  *pipelineLayout);
+  const vk::ComputePipelineCreateInfo computeCreateInfo({}, stageCreateInfo,
+                                                        *pipelineLayout);
 
   return vk::raii::Pipeline(device, pipelineCache, computeCreateInfo);
 }
@@ -204,24 +204,20 @@ std::vector<char const*> dnm::gatherLayers(
 }
 
 std::vector<std::string> dnm::getDeviceExtensions() {
-  return {
-    VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-#if !defined(NDEBUG)
-        VK_EXT_DEBUG_MARKER_EXTENSION_NAME
-#endif
-  };
+  return {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
 }
 
 std::vector<std::string> dnm::getInstanceExtensions() {
   std::vector<std::string> extensions;
   extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 #if !defined(NDEBUG)
-  extensions.push_back(VK_EXT_DEBUG_REPORT_EXTENSION_NAME);
+  extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
 #endif
 #if defined(VK_USE_PLATFORM_ANDROID_KHR)
   extensions.push_back(VK_KHR_ANDROID_SURFACE_EXTENSION_NAME);
 #elif defined(VK_USE_PLATFORM_IOS_MVK)
-  extensions.push_back(VK_MVK_IOS_SURFACE_EXTENSION_NAME);
+  extensions.push_back(
+      VK_MVK_IOS_SURFACE_EXVK_EXT_DEBUG_UTILS_EXTENSION_NAMETENSION_NAME);
 #elif defined(VK_USE_PLATFORM_MACOS_MVK)
   extensions.push_back(VK_MVK_MACOS_SURFACE_EXTENSION_NAME);
 #elif defined(VK_USE_PLATFORM_MIR_KHR)
@@ -244,7 +240,7 @@ std::vector<std::string> dnm::getInstanceExtensions() {
 
 vk::raii::CommandBuffer dnm::makeCommandBuffer(
     vk::raii::Device const& device, vk::raii::CommandPool const& commandPool) {
-  vk::CommandBufferAllocateInfo commandBufferAllocateInfo(
+  const vk::CommandBufferAllocateInfo commandBufferAllocateInfo(
       *commandPool, vk::CommandBufferLevel::ePrimary, 1);
   return std::move(
       vk::raii::CommandBuffers(device, commandBufferAllocateInfo).front());
@@ -254,13 +250,14 @@ vk::raii::DescriptorPool dnm::makeDescriptorPool(
     vk::raii::Device const& device,
     std::span<const vk::DescriptorPoolSize> poolSizes) {
   assert(!poolSizes.empty());
-  u32 maxSets = std::accumulate(poolSizes.begin(), poolSizes.end(), 0,
-                                [](u32 sum, vk::DescriptorPoolSize const& dps) {
-                                  return sum + dps.descriptorCount;
-                                });
+  const u32 maxSets =
+      std::accumulate(poolSizes.begin(), poolSizes.end(), 0,
+                      [](u32 sum, vk::DescriptorPoolSize const& dps) {
+                        return sum + dps.descriptorCount;
+                      });
   assert(0 < maxSets);
 
-  vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo(
+  const vk::DescriptorPoolCreateInfo descriptorPoolCreateInfo(
       vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet, maxSets, poolSizes);
   return vk::raii::DescriptorPool(device, descriptorPoolCreateInfo);
 }
@@ -276,8 +273,8 @@ vk::raii::DescriptorSetLayout dnm::makeDescriptorSetLayout(
         dnm::checked_cast<u32>(i), std::get<0>(bindingData[i]),
         std::get<1>(bindingData[i]), std::get<2>(bindingData[i]));
   }
-  vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(flags,
-                                                                  bindings);
+  const vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(
+      flags, bindings);
   return vk::raii::DescriptorSetLayout(device, descriptorSetLayoutCreateInfo);
 }
 
@@ -292,10 +289,10 @@ vk::raii::Device dnm::makeDevice(
     enabledExtensions.push_back(ext.data());
   }
 
-  float queuePriority = 0.0f;
+  const float queuePriority = 0.0f;
   vk::DeviceQueueCreateInfo deviceQueueCreateInfo(
       vk::DeviceQueueCreateFlags(), queueFamilyIndex, 1, &queuePriority);
-  vk::DeviceCreateInfo deviceCreateInfo(
+  const vk::DeviceCreateInfo deviceCreateInfo(
       vk::DeviceCreateFlags(), deviceQueueCreateInfo, {}, enabledExtensions,
       physicalDeviceFeatures, pNext);
   return vk::raii::Device(physicalDevice, deviceCreateInfo);
@@ -308,7 +305,7 @@ std::vector<vk::raii::Framebuffer> dnm::makeFramebuffers(
   vk::ImageView attachments[2];
   attachments[1] = pDepthImageView ? **pDepthImageView : vk::ImageView();
 
-  vk::FramebufferCreateInfo framebufferCreateInfo(
+  const vk::FramebufferCreateInfo framebufferCreateInfo(
       vk::FramebufferCreateFlags(), *renderPass, pDepthImageView ? 2 : 1,
       attachments, extent.width, extent.height, 1);
   std::vector<vk::raii::Framebuffer> framebuffers;
@@ -418,7 +415,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
 }
 
 vk::raii::Image dnm::makeImage(vk::raii::Device const& device) {
-  vk::ImageCreateInfo imageCreateInfo(
+  const vk::ImageCreateInfo imageCreateInfo(
       {}, vk::ImageType::e2D, vk::Format::eB8G8R8A8Unorm,
       vk::Extent3D(640, 640, 1), 1, 1, vk::SampleCountFlagBits::e1,
       vk::ImageTiling::eLinear, vk::ImageUsageFlagBits::eTransferSrc);
@@ -434,17 +431,17 @@ vk::raii::Instance dnm::makeInstance(vk::raii::Context const& context,
   vk::ApplicationInfo applicationInfo(appName.c_str(), 1, engineName.c_str(), 1,
                                       apiVersion);
   std::vector<char const*> enabledLayers =
-      dnm::gatherLayers(layers
+      gatherLayers(layers
 #if !defined(NDEBUG)
-                        ,
-                        context.enumerateInstanceLayerProperties()
+                   ,
+                   context.enumerateInstanceLayerProperties()
 #endif
       );
   std::vector<char const*> enabledExtensions =
-      dnm::gatherExtensions(extensions
+      gatherExtensions(extensions
 #if !defined(NDEBUG)
-                            ,
-                            context.enumerateInstanceExtensionProperties()
+                       ,
+                       context.enumerateInstanceExtensionProperties()
 #endif
       );
 #if defined(NDEBUG)
@@ -466,10 +463,7 @@ vk::raii::Instance dnm::makeInstance(vk::raii::Context const& context,
                      vk::DebugUtilsMessengerCreateInfoEXT>
       instanceCreateInfo(
           {{}, &applicationInfo, enabledLayers, enabledExtensions},
-          {{},
-           severityFlags,
-           messageTypeFlags,
-           &dnm::debugUtilsMessengerCallback});
+          {{}, severityFlags, messageTypeFlags, &debugUtilsMessengerCallback});
 #endif
 
   return vk::raii::Instance(context,
@@ -502,7 +496,7 @@ vk::raii::RenderPass dnm::makeRenderPass(vk::raii::Device const& device,
   }
   vk::AttachmentReference colorAttachment(
       0, vk::ImageLayout::eColorAttachmentOptimal);
-  vk::AttachmentReference depthAttachment(
+  const vk::AttachmentReference depthAttachment(
       1, vk::ImageLayout::eDepthStencilAttachmentOptimal);
   vk::SubpassDescription subpassDescription(
       vk::SubpassDescriptionFlags(), vk::PipelineBindPoint::eGraphics, {},
@@ -520,18 +514,18 @@ vk::raii::RenderPass dnm::makeRenderPass(vk::raii::Device const& device,
       vk::AccessFlagBits::eColorAttachmentWrite |
           vk::AccessFlagBits::eDepthStencilAttachmentWrite};
 
-  vk::RenderPassCreateInfo renderPassCreateInfo(vk::RenderPassCreateFlags(),
-                                                attachmentDescriptions,
-                                                subpassDescription, dependency);
+  const vk::RenderPassCreateInfo renderPassCreateInfo(
+      vk::RenderPassCreateFlags(), attachmentDescriptions, subpassDescription,
+      dependency);
   return vk::raii::RenderPass(device, renderPassCreateInfo);
 }
 
 vk::Format dnm::pickDepthFormat(
     vk::raii::PhysicalDevice const& physicalDevice) {
-  std::vector<vk::Format> candidates = {vk::Format::eD32Sfloat,
-                                        vk::Format::eD32SfloatS8Uint,
-                                        vk::Format::eD24UnormS8Uint};
-  for (vk::Format format : candidates) {
+  const std::vector<vk::Format> candidates = {vk::Format::eD32Sfloat,
+                                              vk::Format::eD32SfloatS8Uint,
+                                              vk::Format::eD24UnormS8Uint};
+  for (const vk::Format format : candidates) {
     vk::FormatProperties props = physicalDevice.getFormatProperties(format);
 
     if (props.optimalTilingFeatures &
@@ -569,7 +563,7 @@ vk::SurfaceFormatKHR dnm::pickSurfaceFormat(
     }
   } else {
     // request several formats, the first found will be used
-    vk::Format requestedFormats[] = {
+    const vk::Format requestedFormats[] = {
         vk::Format::eB8G8R8A8Unorm, vk::Format::eR8G8B8A8Unorm,
         vk::Format::eB8G8R8Unorm, vk::Format::eR8G8B8Unorm};
     vk::ColorSpaceKHR requestedColorSpace = vk::ColorSpaceKHR::eSrgbNonlinear;
@@ -692,8 +686,9 @@ void dnm::setImageLayout(vk::raii::CommandBuffer const& commandBuffer,
     aspectMask = vk::ImageAspectFlagBits::eColor;
   }
 
-  vk::ImageSubresourceRange imageSubresourceRange(aspectMask, baseMip, 1, 0, 1);
-  vk::ImageMemoryBarrier imageMemoryBarrier(
+  const vk::ImageSubresourceRange imageSubresourceRange(aspectMask, baseMip, 1,
+                                                        0, 1);
+  const vk::ImageMemoryBarrier imageMemoryBarrier(
       sourceAccessMask, destinationAccessMask, oldImageLayout, newImageLayout,
       VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED, image,
       imageSubresourceRange);
@@ -704,10 +699,10 @@ void dnm::setImageLayout(vk::raii::CommandBuffer const& commandBuffer,
 void dnm::submitAndWait(vk::raii::Device const& device,
                         vk::raii::Queue const& queue,
                         vk::raii::CommandBuffer const& commandBuffer) {
-  vk::raii::Fence fence(device, vk::FenceCreateInfo());
+  const vk::raii::Fence fence(device, vk::FenceCreateInfo());
   queue.submit(vk::SubmitInfo(nullptr, nullptr, *commandBuffer), *fence);
   while (vk::Result::eTimeout ==
-         device.waitForFences({*fence}, VK_TRUE, dnm::FenceTimeout))
+         device.waitForFences({*fence}, VK_TRUE, FenceTimeout))
     ;
 }
 
@@ -717,7 +712,7 @@ void dnm::updateDescriptorSets(
     std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
                          vk::DeviceSize, vk::raii::BufferView const*>>
         bufferData,
-    dnm::TextureData const& textureData, u32 bindingOffset) {
+    TextureData const& textureData, u32 bindingOffset) {
   std::vector<vk::DescriptorBufferInfo> bufferInfos;
   bufferInfos.reserve(bufferData.size());
 
@@ -751,7 +746,7 @@ void dnm::updateDescriptorSets(
     std::span<std::tuple<vk::DescriptorType, vk::raii::Buffer const&,
                          vk::DeviceSize, vk::raii::BufferView const*>>
         bufferData,
-    std::span<dnm::TextureData> textureData, u32 bindingOffset) {
+    std::span<TextureData> textureData, u32 bindingOffset) {
   std::vector<vk::DescriptorBufferInfo> bufferInfos;
   bufferInfos.reserve(bufferData.size());
 
@@ -827,11 +822,10 @@ VKAPI_ATTR VkBool32 VKAPI_CALL dnm::debugUtilsMessengerCallback(
   }
 #endif
 
-  std::cerr << vk::to_string(
-                   static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(
-                       messageSeverity))
+  std::cerr << to_string(static_cast<vk::DebugUtilsMessageSeverityFlagBitsEXT>(
+                   messageSeverity))
             << ": "
-            << vk::to_string(
+            << to_string(
                    static_cast<vk::DebugUtilsMessageTypeFlagsEXT>(messageTypes))
             << ":\n";
   std::cerr << std::string("\t") << "messageIDName   = <"
@@ -859,7 +853,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL dnm::debugUtilsMessengerCallback(
     for (u32 i = 0; i < pCallbackData->objectCount; i++) {
       std::cerr << std::string("\t\t") << "Object " << i << "\n";
       std::cerr << std::string("\t\t\t") << "objectType   = "
-                << vk::to_string(static_cast<vk::ObjectType>(
+                << to_string(static_cast<vk::ObjectType>(
                        pCallbackData->pObjects[i].objectType))
                 << "\n";
       std::cerr << std::string("\t\t\t")
@@ -882,15 +876,14 @@ dnm::makeDebugUtilsMessengerCreateInfoEXT() {
           vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral |
               vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance |
               vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
-          &dnm::debugUtilsMessengerCallback};
+          &debugUtilsMessengerCallback};
 }
 
 void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::Image& image, std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(
-      vk::DebugMarkerObjectNameInfoEXT{vk::DebugReportObjectTypeEXT::eImage,
-                                       (u64)((VkImage)(*image)), name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::eImage, (u64)((VkImage)(*image)), name.data()});
 #endif
 }
 
@@ -898,9 +891,8 @@ void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::Buffer& buffer,
                          std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
-      vk::DebugReportObjectTypeEXT::eBuffer, (u64)((VkBuffer)(*buffer)),
-      name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::eBuffer, (u64)((VkBuffer)(*buffer)), name.data()});
 #endif
 }
 
@@ -908,9 +900,9 @@ void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::Semaphore& semaphore,
                          std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
-      vk::DebugReportObjectTypeEXT::eSemaphore,
-      (u64)((VkSemaphore)(*semaphore)), name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::eSemaphore, (u64)((VkSemaphore)(*semaphore)),
+      name.data()});
 #endif
 }
 
@@ -918,9 +910,8 @@ void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::Pipeline& pipeline,
                          std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
-      vk::DebugReportObjectTypeEXT::ePipeline, (u64)((VkPipeline)(*pipeline)),
-      name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::ePipeline, (u64)((VkPipeline)(*pipeline)), name.data()});
 #endif
 }
 
@@ -928,24 +919,23 @@ void registerDebugMarker(const vk::raii::Device& device,
                          const vk::raii::CommandBuffer& commandBuffer,
                          std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
-      vk::DebugReportObjectTypeEXT::eCommandBuffer,
-      (u64)((VkCommandBuffer)(*commandBuffer)), name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::eCommandBuffer, (u64)((VkCommandBuffer)(*commandBuffer)),
+      name.data()});
 #endif
 }
 
 void registerDebugMarker(const vk::raii::Device& device,
                          std::string_view name) {
 #if !defined(NDEBUG)
-  device.debugMarkerSetObjectNameEXT(vk::DebugMarkerObjectNameInfoEXT{
-      vk::DebugReportObjectTypeEXT::eDevice,
-      (u64)((VkDevice)(*device)), name.data()});
+  device.setDebugUtilsObjectNameEXT(vk::DebugUtilsObjectNameInfoEXT{
+      vk::ObjectType::eDevice, (u64)((VkDevice)(*device)), name.data()});
 #endif
 }
 
-  BufferRegistration::~BufferRegistration() {
-    if (renderer) {
-      renderer->removeBufferRegistration(identifier);
-    }
+BufferRegistration::~BufferRegistration() {
+  if (renderer) {
+    renderer->removeBufferRegistration(identifier);
   }
+}
 }  // namespace dnm

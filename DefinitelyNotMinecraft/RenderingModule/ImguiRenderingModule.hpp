@@ -1,7 +1,7 @@
 #pragma once
 
-#include "Renderer.hpp"
-#include "Config.hpp"
+#include <Rendering/Renderer.hpp>
+#include <Core/Config.hpp>
 
 namespace dnm {
 
@@ -10,7 +10,7 @@ class ImguiRenderingModule {
   explicit ImguiRenderingModule(Config* config, Renderer* renderer);
   ~ImguiRenderingModule();
 
-  void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt, const vk::raii::Semaphore& previousRenderStepFinished);
+  void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt, const vk::raii::Semaphore& previousRenderStepFinished) const;
 
   vk::raii::Semaphore& getRenderingFinishedSemaphore();
 

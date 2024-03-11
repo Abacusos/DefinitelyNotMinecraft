@@ -1,21 +1,23 @@
-#include "Renderer.hpp"
+#include <Rendering/Renderer.hpp>
 
 #if (VULKAN_HPP_DISPATCH_LOADER_DYNAMIC == 1)
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #endif
 
-#include "RAIIUtils.hpp"
-#include "ShortTypes.hpp"
+#include <Core/Math.hpp>
+#include <Core/Profiler.hpp>
+#include <Core/ShortTypes.hpp>
+#include <Rendering/RAIIUtils.hpp>
+
 #include "glslang/SPIRV/GlslangToSpv.h"
-#include "optick.h"
 
 namespace dnm {
 
 Renderer::Renderer(Config* config) : m_config{config} {
   glslang::InitializeProcess();
 
-  m_instance = makeInstance(m_context, "AppName", "EngineName", {},
-                            getInstanceExtensions());
+  m_instance = makeInstance(m_context, "Definitely not Minecraft", "EngineName",
+                            {}, getInstanceExtensions());
 #if !defined(NDEBUG)
   vk::raii::DebugUtilsMessengerEXT debugUtilsMessenger(
       m_instance, makeDebugUtilsMessengerCreateInfoEXT());
@@ -31,7 +33,8 @@ Renderer::Renderer(Config* config) : m_config{config} {
       m_physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2,
                                     vk::PhysicalDevice8BitStorageFeaturesKHR>();
 
-  m_surfaceData = SurfaceData(m_instance, "AppName", vk::Extent2D(1280, 720));
+  m_surfaceData = SurfaceData(m_instance, "Definitely not Minecraft",
+                              vk::Extent2D(1920, 1017));
 
   std::pair<u32, u32> graphicsAndPresentQueueFamilyIndex =
       findGraphicsAndPresentQueueFamilyIndex(m_physicalDevice,
@@ -55,15 +58,12 @@ Renderer::Renderer(Config* config) : m_config{config} {
   auto device = static_cast<VkDevice>(*m_device);
   auto physicalDevice = static_cast<VkPhysicalDevice>(*m_physicalDevice);
   auto queue = static_cast<VkQueue>(*m_graphicsQueue);
-  OPTICK_GPU_INIT_VULKAN(&device, &physicalDevice, &queue,
-                         &graphicsAndPresentQueueFamilyIndex.first, 1u,
-                         nullptr);
+
   m_pipelineCache =
       vk::raii::PipelineCache(m_device, vk::PipelineCacheCreateInfo());
 
-  m_projection =
-      createBuffer(sizeof(glm::mat4x4), vk::BufferUsageFlagBits::eUniformBuffer,
-                   "Projection Matrix");
+  m_projection = createBuffer(
+      sizeof(m4), vk::BufferUsageFlagBits::eUniformBuffer, "Projection Matrix");
   m_projectionClipRegistration =
       registerRAIIBuffer(GlobalBuffers::ProjectionClip, m_projection);
 
@@ -80,9 +80,9 @@ Renderer::~Renderer() {
 }
 
 u32 Renderer::prepareDrawFrame() {
-  OPTICK_EVENT();
+  ZoneScoped;
   {
-    OPTICK_EVENT("Wait on fence");
+    ZoneScopedN("Wait on fence");
     while (vk::Result::eTimeout ==
            m_device.waitForFences({*m_drawFence}, VK_TRUE, FenceTimeout))
       ;
@@ -92,7 +92,7 @@ u32 Renderer::prepareDrawFrame() {
   vk::Result result;
   u32 imageIndex;
   {
-    OPTICK_EVENT("Acquire next image");
+    ZoneScopedN("Acquire next image");
     std::tie(result, imageIndex) = m_swapChainData.swapChain.acquireNextImage(
         FenceTimeout, *m_imageAcquiredSemaphore);
   }
@@ -112,20 +112,18 @@ u32 Renderer::prepareDrawFrame() {
 
 void Renderer::finishDrawFrame(vk::raii::Semaphore& finishedRendering,
                                u32 imageIndex) {
-  OPTICK_EVENT();
+  ZoneScoped;
   vk::PipelineStageFlags waitDestinationStageMask(
       vk::PipelineStageFlagBits::eColorAttachmentOutput);
-  std::array<vk::SubmitInfo, 2u> submitInfo = {
+  const std::array submitInfo = {
       vk::SubmitInfo{*m_imageAcquiredSemaphore, waitDestinationStageMask},
       vk::SubmitInfo{*finishedRendering, waitDestinationStageMask}};
   m_graphicsQueue.submit(submitInfo, *m_drawFence);
 
-  vk::PresentInfoKHR presentInfoKHR(nullptr, *m_swapChainData.swapChain,
-                                    imageIndex);
+  const vk::PresentInfoKHR presentInfoKHR(nullptr, *m_swapChainData.swapChain,
+                                          imageIndex);
 
-  // Optick does not use the pointer, so just use void
-  // OPTICK_GPU_FLIP(nullptr);
-  vk::Result result = m_presentQueue.presentKHR(presentInfoKHR);
+  const vk::Result result = m_presentQueue.presentKHR(presentInfoKHR);
   switch (result) {
     case vk::Result::eSuccess:
       break;
@@ -177,25 +175,25 @@ vk::Format Renderer::getColorFormat() const { return m_colorFormat; }
 
 Renderer::FamilyIndices Renderer::getIndices() const { return m_familyIndices; }
 
-vk::raii::CommandBuffer Renderer::getCommandBuffer() {
+vk::raii::CommandBuffer Renderer::getCommandBuffer() const {
   return makeCommandBuffer(m_device, m_commandPool);
 }
 
 BufferData Renderer::createBuffer(vk::DeviceSize size,
                                   vk::BufferUsageFlags flags,
                                   std::string_view debugName,
-                                  vk::MemoryPropertyFlags propertyFlags) {
+                                  vk::MemoryPropertyFlags propertyFlags) const {
   auto result =
       BufferData(m_physicalDevice, m_device, size, flags, propertyFlags);
   registerDebugMarker(m_device, result.buffer, debugName);
   return result;
 }
 
-std::unique_ptr<dnm::BufferRegistration> Renderer::registerRAIIBuffer(
+std::unique_ptr<BufferRegistration> Renderer::registerRAIIBuffer(
 
     GlobalBuffers bufferIdentifier, const BufferData& buffer) {
   registerBuffer(bufferIdentifier, buffer);
-  return std::make_unique<dnm::BufferRegistration>(bufferIdentifier, this);
+  return std::make_unique<BufferRegistration>(bufferIdentifier, this);
 }
 
 void Renderer::registerBuffer(GlobalBuffers bufferIdentifier,
@@ -208,18 +206,24 @@ void Renderer::removeBufferRegistration(GlobalBuffers bufferIdentifier) {
 }
 
 const vk::raii::Buffer* Renderer::getGlobalBuffer(
-    GlobalBuffers bufferIdentifier) {
+    GlobalBuffers bufferIdentifier) const {
   return m_globalBuffers[static_cast<u32>(bufferIdentifier)];
 }
 
 void Renderer::oneTimeSubmit(
-    std::function<void(const vk::raii::CommandBuffer& commandBuffer)>
-        function) {
+    std::function<void(const vk::raii::CommandBuffer& commandBuffer)> function)
+    const {
   dnm::oneTimeSubmit(m_device, m_commandPool, m_graphicsQueue,
                      std::move(function));
 }
 
-void Renderer::waitIdle() { m_device.waitIdle(); }
+void Renderer::waitIdle() const { m_device.waitIdle(); }
+
+m4 Renderer::getProjectionMatrix() const {
+  return createProjectionMatrix(
+      glm::vec2(m_surfaceData.extent.width, m_surfaceData.extent.height),
+      m_config->nearPlane, m_config->farPlane);
+}
 
 void Renderer::recreateSwapChainFromWindow() {
   i32 width = 0, height = 0;
@@ -236,7 +240,7 @@ void Renderer::recreateSwapChainFromWindow() {
 void Renderer::recreateSwapChain() {
   m_device.waitIdle();
 
-  std::pair<u32, u32> graphicsAndPresentQueueFamilyIndex =
+  const std::pair<u32, u32> graphicsAndPresentQueueFamilyIndex =
       findGraphicsAndPresentQueueFamilyIndex(m_physicalDevice,
                                              m_surfaceData.surface);
 
@@ -260,31 +264,7 @@ void Renderer::recreateSwapChain() {
       makeFramebuffers(m_device, m_renderPass, m_swapChainData.imageViews,
                        &m_depthBufferData.imageView, m_surfaceData.extent);
 
-  // TODO The near and far are swapped here, not sure if this is correct
-  std::array<glm::mat4x4, 1u> matrices{
-      createProjectionMatrix(m_surfaceData.extent, m_config->farPlane, 0.01f)};
-  copyToDevice(m_projection.deviceMemory,
-               std::span<const glm::mat4x4>(matrices));
-}
-
-glm::mat4x4 Renderer::createProjectionMatrix(const vk::Extent2D& extent,
-                                             float n, float f) {
-  constexpr float fov = glm::radians(60.0f);
-  float aspect = extent.width / (float)extent.height;
-
-  constexpr float fov_rad = 45.0f * 2.0f * glm::pi<float>() / 360.0f;
-  float focal_length = 1.0f / std::tan(fov_rad / 2.0f);
-
-  float x = focal_length / aspect;
-  float y = -focal_length;
-  const auto a = n / (f - n);
-  const auto b = f * a;
-
-  glm::mat4x4 projection{
-      x,    0.0f, 0.0f, 0.0f,  0.0f, y,    0.0f, 0.0f,
-      0.0f, 0.0f, a,    -1.0f, 0.0f, 0.0f, b,    0.0f,
-  };
-
-  return projection;
+  std::array matrices{getProjectionMatrix()};
+  copyToDevice(m_projection.deviceMemory, std::span<const m4>(matrices));
 }
 }  // namespace dnm

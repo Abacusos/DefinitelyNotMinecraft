@@ -2,4 +2,4 @@
 add_subdirectory("stb")
 add_subdirectory("perlinNoise")
 add_subdirectory("imgui")
-add_subdirectory("optick")
+add_subdirectory("tracy")

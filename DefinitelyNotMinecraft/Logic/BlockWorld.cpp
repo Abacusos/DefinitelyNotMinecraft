@@ -1,14 +1,16 @@
-#include "BlockWorld.hpp"
+#include <Logic/BlockWorld.hpp>
 
-#include <chrono>
-
-#include "Config.hpp"
+#include <Logic/Camera.hpp>
+#include <Core/Config.hpp>
+#include <Core/Profiler.hpp>
 
 namespace dnm {
 
 namespace {
 constexpr u8 highestBit = u8(1) << 7;
-}
+
+constexpr bool testWorldSetup = false;
+}  // namespace
 
 BlockWorld::BlockWorld(Config* config) : m_config{config} {}
 
@@ -21,7 +23,7 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
       break;
     }
     case ChunkState::InProgress: {
-      if (auto status = chunk.loadTask.wait_for(std::chrono::seconds(0));
+      if (const auto status = chunk.loadTask.wait_for(std::chrono::seconds(0));
           status == std::future_status::ready) {
         // Although this is kind of pointless
         chunk.loadTask.get();
@@ -37,15 +39,29 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
                                                            &chunk.data]() {
         auto getBlockType = [this](float x, float y, float z,
                                    bool blockAboveExists) {
+          BlockType result = BlockWorld::air;
+
+          if constexpr (testWorldSetup) {
+            if (x > 495 && x < 505 && z == 495) {
+              result = 4;
+            } else if (x > 495 && x < 505 && z == 505) {
+              result = 1;
+            } else if (z > 495 && z < 505 && x == 505) {
+              result = 2;
+            } else if (z > 495 && z < 505 && x == 495) {
+              result = 3;
+            }
+            return result;
+          }
+
           x /= 100.0f;
           y /= 100.0f;
           z /= 100.0f;
-          auto grass = m_noiseGrass.octave3D_01(x, y, z, 6);
-          auto cobbleStone = m_noiseCobble.octave3D_01(x, y, z, 6);
-          auto stone = m_noiseStone.octave3D_01(x, y, z, 6);
-          auto sand = m_noiseSand.octave3D_01(x, y, z, 6);
+          const float grass = m_noiseGrass.octave3D_01(x, y, z, 6);
+          const float cobbleStone = m_noiseCobble.octave3D_01(x, y, z, 6);
+          const float stone = m_noiseStone.octave3D_01(x, y, z, 6);
+          const float sand = m_noiseSand.octave3D_01(x, y, z, 6);
 
-          BlockType result = BlockWorld::air;
           float currentHighestNoise = 0.6f;
 
           if (grass > currentHighestNoise) {
@@ -74,15 +90,15 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
                ++localChunkZ) {
             for (auto localChunkX = 0u; localChunkX < chunkLocalSize;
                  ++localChunkX) {
-              auto globalX = chunkPosition.x * chunkLocalSize + localChunkX;
-              auto globalZ = chunkPosition.y * chunkLocalSize + localChunkZ;
+              const i64 globalX = chunkPosition.x * chunkLocalSize + localChunkX;
+              const i64 globalZ = chunkPosition.y * chunkLocalSize + localChunkZ;
 
-              auto heightOffset = chunkLocalSize * chunkLocalSize * localChunkY;
-              auto inLayerOffset = localChunkZ * chunkLocalSize + localChunkX;
+              const auto heightOffset = chunkLocalSize * chunkLocalSize * localChunkY;
+              const auto inLayerOffset = localChunkZ * chunkLocalSize + localChunkX;
 
               bool blockAboveExists = false;
               if (localChunkY != chunkHeight - 1) {
-                auto heightOffsetAbove =
+                  const auto heightOffsetAbove =
                     chunkLocalSize * chunkLocalSize * (localChunkY + 1);
                 blockAboveExists =
                     (*blockData)[heightOffsetAbove + inLayerOffset] !=
@@ -123,7 +139,7 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
 
 bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
   std::lock_guard g{m_chunkDataMutex};
-  auto it = m_chunkData.find(chunkPosition);
+  const auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     return false;
   }
@@ -133,7 +149,7 @@ bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
 
 void BlockWorld::clearRenderingDirty(glm::ivec2 chunkPosition) {
   std::lock_guard g{m_chunkDataMutex};
-  auto it = m_chunkData.find(chunkPosition);
+  const auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     assert(false);
     return;
@@ -146,7 +162,7 @@ void BlockWorld::clearRenderingDirty(glm::ivec2 chunkPosition) {
 std::span<const BlockType> BlockWorld::getChunkData(
     glm::ivec2 chunkPosition) const {
   std::lock_guard g{m_chunkDataMutex};
-  auto it = m_chunkData.find(chunkPosition);
+  const auto it = m_chunkData.find(chunkPosition);
   if (it == m_chunkData.end()) {
     assert(false);
     return {};
@@ -157,7 +173,7 @@ std::span<const BlockType> BlockWorld::getChunkData(
 
 void BlockWorld::modifyFirstTracedBlock(
     const std::optional<BlockWorld::BlockPosition>& potentialTarget) {
-  auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
+    const auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
   switch (action) {
     case BlockAction::Add: {
       if (potentialTarget) {
@@ -178,12 +194,9 @@ void BlockWorld::modifyFirstTracedBlock(
 }
 
 std::optional<BlockWorld::BlockPosition> BlockWorld::getFirstTracedBlock(
-    glm::vec3 position, glm::vec3 rotation) {
-  glm::vec3 direction;
-  direction.x = cos(glm::radians(rotation.y)) * cos(glm::radians(rotation.x));
-  direction.y = -sin(glm::radians(rotation.x));
-  direction.z = sin(glm::radians(rotation.y)) * cos(glm::radians(rotation.x));
-  glm::vec3 cameraFront = glm::normalize(direction);
+    Camera* camera) {
+  v3 position = camera->getPosition();
+  v3 cameraFront = camera->getForward();
 
   std::optional<BlockPosition> potentialTarget;
   auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
@@ -222,21 +235,21 @@ std::optional<BlockWorld::BlockPosition> BlockWorld::getFirstTracedBlock(
 
 void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
                              BlockType type) {
-  // In theory we need to lock here. But the write access only happens on the 
-    // main thread as well as this access here, so we can skip it for now.
-    
-  auto it = m_chunkData.find(position.chunkIndex);
+  ZoneScoped;
+  // In theory, we need to lock here. But the write access only happens on the
+  // main thread as well as this access here, so we can skip it for now.
+
+  const auto it = m_chunkData.find(position.chunkIndex);
   assert(it != m_chunkData.end());
 
-  auto heightOffset =
+  const auto heightOffset =
       chunkLocalSize * chunkLocalSize * position.positionWithinChunk.y;
-  auto inLayerOffset = position.positionWithinChunk.z * chunkLocalSize +
+  const auto inLayerOffset = position.positionWithinChunk.z * chunkLocalSize +
                        position.positionWithinChunk.x;
 
   it->second.data[heightOffset + inLayerOffset] = type;
   it->second.state = ChunkState::DirtyRendering;
 
-  bool allNeighborBlocksExist = true;
   for (auto y = -1; y < 2; ++y) {
     for (auto z = -1; z < 2; ++z) {
       for (auto x = -1; x < 2; ++x) {
@@ -253,7 +266,7 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
 }
 
 std::optional<BlockWorld::BlockPosition> BlockWorld::getBlockPosition(
-    glm::vec3 position) {
+    v3 position) {
   std::lock_guard g{m_chunkDataMutex};
   if (position.y < 0.0f || position.y >= chunkHeight) {
     return {};
@@ -268,19 +281,19 @@ std::optional<BlockWorld::BlockPosition> BlockWorld::getBlockPosition(
                  static_cast<i32>(position.y),
                  (static_cast<i32>(position.z) % chunkLocalSize));
 
-  auto it = m_chunkData.find(result.chunkIndex);
+  const auto it = m_chunkData.find(result.chunkIndex);
   if (it == m_chunkData.end() ||
       it->second.state != ChunkState::FinishedGeneration) {
     result.blockExists = false;
     return result;
   }
 
-  auto heightOffset =
+  const auto heightOffset =
       chunkLocalSize * chunkLocalSize * result.positionWithinChunk.y;
-  auto inLayerOffset = result.positionWithinChunk.z * chunkLocalSize +
+  const auto inLayerOffset = result.positionWithinChunk.z * chunkLocalSize +
                        result.positionWithinChunk.x;
 
-  auto blockData = *(it->second.data.begin() + heightOffset + inLayerOffset);
+  const auto blockData = *(it->second.data.begin() + heightOffset + inLayerOffset);
   result.blockExists = blockData != BlockWorld::air;
 
   return result;
@@ -321,9 +334,9 @@ void BlockWorld::updateVisibilityBit(const BlockPosition& position,
                                      std::span<BlockType> positionChunkData) {
   assert(positionChunkData.size() > 0);
 
-  auto heightOffsetBlockCenter =
+  const auto heightOffsetBlockCenter =
       chunkLocalSize * chunkLocalSize * (position.positionWithinChunk.y);
-  auto inLayerOffsetBlockCenter =
+  const auto inLayerOffsetBlockCenter =
       (position.positionWithinChunk.z) * chunkLocalSize +
       (position.positionWithinChunk.x);
 
@@ -370,9 +383,9 @@ void BlockWorld::updateVisibilityBit(const BlockPosition& position,
           data = positionChunkData;
         }
 
-        auto heightOffsetBlock = chunkLocalSize * chunkLocalSize *
+        const auto heightOffsetBlock = chunkLocalSize * chunkLocalSize *
                                  (positionWithOffset.positionWithinChunk.y);
-        auto inLayerOffsetBlock =
+        const auto inLayerOffsetBlock =
             (positionWithOffset.positionWithinChunk.z) * chunkLocalSize +
             (positionWithOffset.positionWithinChunk.x);
         if (data[heightOffsetBlock + inLayerOffsetBlock] == BlockWorld::air) {
