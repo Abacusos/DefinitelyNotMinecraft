@@ -1,8 +1,7 @@
-#include <Logic/BlockWorld.hpp>
-
-#include <Logic/Camera.hpp>
 #include <Core/Config.hpp>
 #include <Core/Profiler.hpp>
+#include <Logic/BlockWorld.hpp>
+#include <Logic/Camera.hpp>
 
 namespace dnm {
 
@@ -34,99 +33,103 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
     case ChunkState::Created: {
       // Due to pointer stability of unordered maps, this should be fine even if
       // more things are inserted
-      chunk.loadTask = std::async(std::launch::async, [this, chunkPosition,
-                                                       blockData =
-                                                           &chunk.data]() {
-        auto getBlockType = [this](float x, float y, float z,
-                                   bool blockAboveExists) {
-          BlockType result = BlockWorld::air;
+      chunk.loadTask = std::async(
+          std::launch::async, [this, chunkPosition, blockData = &chunk.data]() {
+            auto getBlockType = [this](float x, float y, float z,
+                                       bool blockAboveExists) {
+              BlockType result = BlockWorld::air;
 
-          if constexpr (testWorldSetup) {
-            if (x > 495 && x < 505 && z == 495) {
-              result = 4;
-            } else if (x > 495 && x < 505 && z == 505) {
-              result = 1;
-            } else if (z > 495 && z < 505 && x == 505) {
-              result = 2;
-            } else if (z > 495 && z < 505 && x == 495) {
-              result = 3;
-            }
-            return result;
-          }
-
-          x /= 100.0f;
-          y /= 100.0f;
-          z /= 100.0f;
-          const float grass = m_noiseGrass.octave3D_01(x, y, z, 6);
-          const float cobbleStone = m_noiseCobble.octave3D_01(x, y, z, 6);
-          const float stone = m_noiseStone.octave3D_01(x, y, z, 6);
-          const float sand = m_noiseSand.octave3D_01(x, y, z, 6);
-
-          float currentHighestNoise = 0.6f;
-
-          if (grass > currentHighestNoise) {
-            currentHighestNoise = grass;
-            result = blockAboveExists ? 4 : 0;
-          }
-          if (cobbleStone > currentHighestNoise) {
-            currentHighestNoise = cobbleStone;
-            result = 1;
-          }
-          if (stone > currentHighestNoise) {
-            currentHighestNoise = stone;
-            result = 2;
-          }
-          if (sand > currentHighestNoise) {
-            currentHighestNoise = sand;
-            result = 3;
-          }
-
-          return result;
-        };
-
-        for (i64 localChunkY = chunkHeight - 1; localChunkY >= 0;
-             --localChunkY) {
-          for (auto localChunkZ = 0u; localChunkZ < chunkLocalSize;
-               ++localChunkZ) {
-            for (auto localChunkX = 0u; localChunkX < chunkLocalSize;
-                 ++localChunkX) {
-              const i64 globalX = chunkPosition.x * chunkLocalSize + localChunkX;
-              const i64 globalZ = chunkPosition.y * chunkLocalSize + localChunkZ;
-
-              const auto heightOffset = chunkLocalSize * chunkLocalSize * localChunkY;
-              const auto inLayerOffset = localChunkZ * chunkLocalSize + localChunkX;
-
-              bool blockAboveExists = false;
-              if (localChunkY != chunkHeight - 1) {
-                  const auto heightOffsetAbove =
-                    chunkLocalSize * chunkLocalSize * (localChunkY + 1);
-                blockAboveExists =
-                    (*blockData)[heightOffsetAbove + inLayerOffset] !=
-                    BlockWorld::air;
+              if constexpr (testWorldSetup) {
+                if (x > 495 && x < 505 && z == 495) {
+                  result = 4;
+                } else if (x > 495 && x < 505 && z == 505) {
+                  result = 1;
+                } else if (z > 495 && z < 505 && x == 505) {
+                  result = 2;
+                } else if (z > 495 && z < 505 && x == 495) {
+                  result = 3;
+                }
+                return result;
               }
 
-              (*blockData)[heightOffset + inLayerOffset] =
-                  getBlockType(globalX, localChunkY, globalZ, blockAboveExists);
-            }
-          }
-        }
+              x /= 100.0f;
+              y /= 100.0f;
+              z /= 100.0f;
+              const float grass = m_noiseGrass.octave3D_01(x, y, z, 6);
+              const float cobbleStone = m_noiseCobble.octave3D_01(x, y, z, 6);
+              const float stone = m_noiseStone.octave3D_01(x, y, z, 6);
+              const float sand = m_noiseSand.octave3D_01(x, y, z, 6);
 
-        BlockPosition position{};
-        position.chunkIndex = chunkPosition;
+              float currentHighestNoise = 0.6f;
 
-        for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
-          for (auto localChunkZ = 0; localChunkZ < chunkLocalSize;
-               ++localChunkZ) {
-            for (auto localChunkX = 0; localChunkX < chunkLocalSize;
-                 ++localChunkX) {
-              position.positionWithinChunk = {localChunkX, localChunkY,
-                                              localChunkZ};
-              std::span data = *blockData;
-              updateVisibilityBit(position, data);
+              if (grass > currentHighestNoise) {
+                currentHighestNoise = grass;
+                result = blockAboveExists ? 4 : 0;
+              }
+              if (cobbleStone > currentHighestNoise) {
+                currentHighestNoise = cobbleStone;
+                result = 1;
+              }
+              if (stone > currentHighestNoise) {
+                currentHighestNoise = stone;
+                result = 2;
+              }
+              if (sand > currentHighestNoise) {
+                currentHighestNoise = sand;
+                result = 3;
+              }
+
+              return result;
+            };
+
+            for (i64 localChunkY = chunkHeight - 1; localChunkY >= 0;
+                 --localChunkY) {
+              for (auto localChunkZ = 0u; localChunkZ < chunkLocalSize;
+                   ++localChunkZ) {
+                for (auto localChunkX = 0u; localChunkX < chunkLocalSize;
+                     ++localChunkX) {
+                  const i64 globalX =
+                      chunkPosition.x * chunkLocalSize + localChunkX;
+                  const i64 globalZ =
+                      chunkPosition.y * chunkLocalSize + localChunkZ;
+
+                  const auto heightOffset =
+                      chunkLocalSize * chunkLocalSize * localChunkY;
+                  const auto inLayerOffset =
+                      localChunkZ * chunkLocalSize + localChunkX;
+
+                  bool blockAboveExists = false;
+                  if (localChunkY != chunkHeight - 1) {
+                    const auto heightOffsetAbove =
+                        chunkLocalSize * chunkLocalSize * (localChunkY + 1);
+                    blockAboveExists =
+                        (*blockData)[heightOffsetAbove + inLayerOffset] !=
+                        BlockWorld::air;
+                  }
+
+                  (*blockData)[heightOffset + inLayerOffset] = getBlockType(
+                      globalX, localChunkY, globalZ, blockAboveExists);
+                }
+              }
             }
-          }
-        }
-      });
+
+            BlockPosition position{};
+            position.chunkIndex = chunkPosition;
+
+            for (i64 localChunkY = 0; localChunkY < chunkHeight;
+                 ++localChunkY) {
+              for (auto localChunkZ = 0; localChunkZ < chunkLocalSize;
+                   ++localChunkZ) {
+                for (auto localChunkX = 0; localChunkX < chunkLocalSize;
+                     ++localChunkX) {
+                  position.positionWithinChunk = {localChunkX, localChunkY,
+                                                  localChunkZ};
+                  std::span data = *blockData;
+                  updateVisibilityBit(position, data);
+                }
+              }
+            }
+          });
       chunk.state = ChunkState::InProgress;
       break;
     }
@@ -173,7 +176,8 @@ std::span<const BlockType> BlockWorld::getChunkData(
 
 void BlockWorld::modifyFirstTracedBlock(
     const std::optional<BlockWorld::BlockPosition>& potentialTarget) {
-    const auto action = static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
+  const auto action =
+      static_cast<BlockWorld::BlockAction>(m_config->insertionMode);
   switch (action) {
     case BlockAction::Add: {
       if (potentialTarget) {
@@ -245,7 +249,7 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
   const auto heightOffset =
       chunkLocalSize * chunkLocalSize * position.positionWithinChunk.y;
   const auto inLayerOffset = position.positionWithinChunk.z * chunkLocalSize +
-                       position.positionWithinChunk.x;
+                             position.positionWithinChunk.x;
 
   it->second.data[heightOffset + inLayerOffset] = type;
   it->second.state = ChunkState::DirtyRendering;
@@ -291,9 +295,10 @@ std::optional<BlockWorld::BlockPosition> BlockWorld::getBlockPosition(
   const auto heightOffset =
       chunkLocalSize * chunkLocalSize * result.positionWithinChunk.y;
   const auto inLayerOffset = result.positionWithinChunk.z * chunkLocalSize +
-                       result.positionWithinChunk.x;
+                             result.positionWithinChunk.x;
 
-  const auto blockData = *(it->second.data.begin() + heightOffset + inLayerOffset);
+  const auto blockData =
+      *(it->second.data.begin() + heightOffset + inLayerOffset);
   result.blockExists = blockData != BlockWorld::air;
 
   return result;
@@ -383,8 +388,9 @@ void BlockWorld::updateVisibilityBit(const BlockPosition& position,
           data = positionChunkData;
         }
 
-        const auto heightOffsetBlock = chunkLocalSize * chunkLocalSize *
-                                 (positionWithOffset.positionWithinChunk.y);
+        const auto heightOffsetBlock =
+            chunkLocalSize * chunkLocalSize *
+            (positionWithOffset.positionWithinChunk.y);
         const auto inLayerOffsetBlock =
             (positionWithOffset.positionWithinChunk.z) * chunkLocalSize +
             (positionWithOffset.positionWithinChunk.x);

@@ -92,6 +92,8 @@ ZoneScoped;
         positionBlock->chunkIndex.y * BlockWorld::chunkLocalSize +
             positionBlock->positionWithinChunk.z};
 
+    m_config->lookingAt = position;
+
     // slightly push them outwards to make them easier to see
     const v3 umm = position + v3{-0.51f, 0.51f, -0.51f};
     const v3 ump = position + v3{-0.51f, 0.51f, 0.51f};

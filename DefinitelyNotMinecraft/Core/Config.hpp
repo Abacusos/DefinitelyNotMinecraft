@@ -1,5 +1,6 @@
 #pragma once
 
+#include <Core/GLMInclude.hpp>
 #include <Core/ShortTypes.hpp>
 
 namespace dnm {
@@ -14,5 +15,7 @@ struct Config {
   f32 nearPlane = 0.01f;
   f32 farPlane = 250.0f;
   u32 insertionMode = 0;
+
+  v3 lookingAt;
 };
 }  // namespace dnm

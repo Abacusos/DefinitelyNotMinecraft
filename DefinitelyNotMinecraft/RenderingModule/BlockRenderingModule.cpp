@@ -28,11 +28,11 @@ constexpr float oneTwelveth = 1.0f / 12.0f;
 static const VertexPT texturedCubeData[] = {
     // left face
     {-0.5f, -0.5f, -0.5f, twoSixth, oneTwelveth},
-    {-0.5f, 0.5f, 0.5f, oneSixth, 0.0f},
     {-0.5f, -0.5f, 0.5f, oneSixth, oneTwelveth},
     {-0.5f, 0.5f, 0.5f, oneSixth, 0.0f},
-    {-0.5f, -0.5f, -0.5f, twoSixth, oneTwelveth},
+    {-0.5f, 0.5f, 0.5f, oneSixth, 0.0f},
     {-0.5f, 0.5f, -0.5f, twoSixth, 0.0f},
+    {-0.5f, -0.5f, -0.5f, twoSixth, oneTwelveth},
     // front face
     {0.5f, 0.5f, 0.5f, threeSixth, 0.0f},
     {-0.5f, 0.5f, 0.5f, twoSixth, 0.0f},
@@ -42,11 +42,11 @@ static const VertexPT texturedCubeData[] = {
     {0.5f, 0.5f, 0.5f, threeSixth, 0.0f},
     // top face
     {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
+    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
     {0.5f, 0.5f, -0.5f, sixSixth, 0.0f},
-    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
     {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
-    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
     {-0.5f, 0.5f, 0.5f, fiveSixth, oneTwelveth},
+    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
     // bottom face
     {-0.5f, -0.5f, -0.5f, 0.0f, oneTwelveth},
     {0.5f, -0.5f, 0.5f, oneSixth, 0.0f},
@@ -63,11 +63,11 @@ static const VertexPT texturedCubeData[] = {
     {0.5f, 0.5f, -0.5f, threeSixth, 0.0f},
     // back face
     {0.5f, 0.5f, -0.5f, fourSixth, 0.0f},
+    {-0.5f, -0.5f, -0.5f, fiveSixth, oneTwelveth},
     {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
     {-0.5f, -0.5f, -0.5f, fiveSixth, oneTwelveth},
-    {-0.5f, -0.5f, -0.5f, fiveSixth, oneTwelveth},
-    {0.5f, -0.5f, -0.5f, fourSixth, oneTwelveth},
     {0.5f, 0.5f, -0.5f, fourSixth, 0.0f},
+    {0.5f, -0.5f, -0.5f, fourSixth, oneTwelveth},
 };
 
 constexpr std::string_view vertexShader = "Shaders/World.vert";
@@ -537,7 +537,7 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
           vk::MemoryPropertyFlagBits::eHostCoherent);
 
   m_blockTypeBuffer = m_renderer->createBuffer(
-      blockCountAllLoadedChunks * sizeof(u8),
+      blockCountAllLoadedChunks * 2u * sizeof(u8),
       vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
@@ -633,9 +633,6 @@ Plane convertToPlane(v3 p1, v3 normal) {
   p.normal = glm::normalize(normal);
   p.distance = glm::dot(p.normal, p1);
   return p;
-}
-float getSignedDistanceToPlane(const Plane& plane, const v3& point) {
-  return glm::dot(plane.normal, point) - plane.distance;
 }
 }  // namespace
 

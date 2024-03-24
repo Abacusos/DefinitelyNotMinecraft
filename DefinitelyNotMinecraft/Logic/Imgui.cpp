@@ -1,10 +1,10 @@
 #include <Logic/Imgui.hpp>
 
-#include "imgui.h"
 #include "imgui_impl_glfw.h"
 
 #include <Core/Profiler.hpp>
 #include <Logic/Camera.hpp>
+
 
 namespace dnm {
 Imgui::Imgui(Config* config, GLFWwindow* window) : m_config{config} {
@@ -25,8 +25,7 @@ Imgui::~Imgui() {
   ImGui::DestroyContext();
 }
 
-void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const
-{
+void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const {
   ZoneScoped;
   ImGui_ImplGlfw_NewFrame();
   ImGui::NewFrame();
@@ -54,6 +53,8 @@ void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const
     ImGui::Checkbox("Culling enabled", &m_config->cullingEnabled);
 
     ImGui::Checkbox("Limit frames", &m_config->limitFrames);
+
+    ImGui::InputFloat3("Looking at", &m_config->lookingAt.x);
 
     ImGui::End();
   }

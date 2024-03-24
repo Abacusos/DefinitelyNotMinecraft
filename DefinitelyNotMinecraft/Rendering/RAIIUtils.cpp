@@ -369,7 +369,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
 
   vk::PipelineRasterizationStateCreateInfo pipelineRasterizationStateCreateInfo(
       vk::PipelineRasterizationStateCreateFlags(), false, false,
-      vk::PolygonMode::eFill, vk::CullModeFlagBits::eNone, frontFace, false,
+      vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, frontFace, false,
       0.0f, 0.0f, 0.0f, 1.0f);
 
   vk::PipelineMultisampleStateCreateInfo pipelineMultisampleStateCreateInfo(

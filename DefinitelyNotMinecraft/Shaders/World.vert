@@ -17,9 +17,13 @@ layout (std140, binding = 2) readonly buffer transformBuffer
   vec4 transforms[];
 };
 
+struct BlockData{
+    uint8_t blockType;
+    uint8_t visibleFace;
+};
 layout (std430, binding = 3) readonly buffer blockTypeBuffer
 {
-  uint8_t blockType[];
+  BlockData blockData[];
 };
 
 layout (location = 0) in vec3 pos;
@@ -29,9 +33,10 @@ layout (location = 0) out vec2 outTexCoord;
 
 void main()
 {
+  bool visible = bitfieldExtract(uint(blockData[gl_InstanceIndex].visibleFace), int(gl_VertexIndex / int(6)), int(1)) != 0;
   outTexCoord = inTexCoord;
-  outTexCoord.y += uint(blockType[gl_InstanceIndex]) * 0.083333f;
+  outTexCoord.y += uint(blockData[gl_InstanceIndex].blockType) * 0.083333f;
   mat4 modelMatrix = mat4(1);
   modelMatrix[3].xyzw = transforms[gl_InstanceIndex]; 
-  gl_Position = (projection * view * modelMatrix) * vec4(pos, 1.0f);
+  gl_Position = (projection * view * modelMatrix) * vec4(visible ? pos : vec3(0.0f, 0.0f, 0.0f), 1.0f);
 }

@@ -27,9 +27,13 @@ layout (std140, binding = 2) buffer transformBuffer
     vec4 transforms[];
 };
 
+struct BlockData{
+    uint8_t blockType;
+    uint8_t visibleFace;
+};
 layout (std430, binding = 3) buffer blockTypeBuffer
 {
-    uint8_t blockType[];
+    BlockData blockData[];
 };
 
 layout (std430, binding = 4) readonly buffer worldDataBuffer
@@ -80,18 +84,24 @@ vec3 indexToPos()
   return vec3(x, gl_WorkGroupID.y, z);
 }
 
-uint toFlatIndex()
+bool isInsideChunk(ivec3 position)
+{
+    return position.y >= 0 && position.y < chunkHeight && (position.x % chunkLocalSize) >= 0 && (position.x % chunkLocalSize) < chunkLocalSize && (position.z % chunkLocalSize) >= 0 && (position.z % chunkLocalSize) < chunkLocalSize;
+}
+
+uint toFlatIndex(ivec3 position)
 {
   int remap = int(remapIndex[gl_WorkGroupID.x]);
   int chunkStartX = (remap % chunksOneDimension);
   int chunkStartZ = (remap / chunksOneDimension);
   
-  int heightOffset = chunkLocalSize * chunkLocalSize * int(gl_WorkGroupID.y);
+  int heightOffset = chunkLocalSize * chunkLocalSize * position.y;
   
   int sizeOfChunk = chunkLocalSize * chunkLocalSize * chunkHeight;
   int offsetPreviousChunk = chunkStartX * sizeOfChunk + chunkStartZ * chunksOneDimension * sizeOfChunk;
    
-  int inLayerOffset = (int(gl_LocalInvocationID.z) % chunkLocalSize) * chunkLocalSize + (int(gl_LocalInvocationID.x) % chunkLocalSize);
+   // Convert any world space positions into chunk local positions
+  int inLayerOffset = (position.z % chunkLocalSize) * chunkLocalSize + (position.x % chunkLocalSize);
 
   return offsetPreviousChunk + heightOffset + inLayerOffset;
 }
@@ -115,13 +125,35 @@ bool isVisible(vec3 center, float extent)
     return visible;
 }
 
+// Reduce the number of visible faces to avoid z fighting
+int getVisibleFaces(ivec3 center)
+{
+	int visibleFaces = 0;
+
+    ivec3 left = center + ivec3(-1, 0, 0);
+    ivec3 front = center + ivec3(0, 0, 1);
+    ivec3 top = center + ivec3(0, 1, 0);
+    ivec3 bottom = center + ivec3(0, -1, 0);
+    ivec3 right = center + ivec3(1, 0, 0);
+    ivec3 back = center + ivec3(0, 0, -1);
+
+    visibleFaces |= (isInsideChunk(left) ? (uint(blockTypeWorld[toFlatIndex(left)]) == uint(255) ? 1 : 0) : 1);
+    visibleFaces |= (isInsideChunk(front) ? (uint(blockTypeWorld[toFlatIndex(front)]) == uint(255) ? 2 : 0) : 2);
+    visibleFaces |= (isInsideChunk(top) ? (uint(blockTypeWorld[toFlatIndex(top)]) == uint(255) ? 4 : 0) : 4);
+    visibleFaces |= (isInsideChunk(bottom) ? (uint(blockTypeWorld[toFlatIndex(bottom)]) == uint(255) ? 8 : 0) : 8);
+    visibleFaces |= (isInsideChunk(right) ? (uint(blockTypeWorld[toFlatIndex(right)]) == uint(255) ? 16 : 0) : 16);
+    visibleFaces |= (isInsideChunk(back) ? (uint(blockTypeWorld[toFlatIndex(back)]) == uint(255) ? 32 : 0) : 32);
+
+    return visibleFaces;
+}
+
 layout (local_size_x = LOCAL_SIZE_X, local_size_y = LOCAL_SIZE_Y, local_size_z = LOCAL_SIZE_Z) in;
 
 uint highestBitSet = uint(128);
 
 void main()
 {
-  uint blockIndex = toFlatIndex();
+  uint blockIndex = toFlatIndex(ivec3(int(gl_LocalInvocationID.x), int(gl_WorkGroupID.y), int(gl_LocalInvocationID.z)));
 
   uint block = uint(blockTypeWorld[blockIndex]);
   if(block == uint(255) || (block & uint(128)) != 0u)
@@ -138,18 +170,18 @@ void main()
   uint highestActiveID = subgroupBallotFindMSB(subgroupBallot(true));
   uint globalIndex = 0;
 
-    // If we're the highest active ID
-  if (highestActiveID == gl_SubgroupInvocationID) {
-    // We need to carve out a slice of out_triangles for our triangle
+    // If we're the highest active ID, carve out a chunk from the global index
+  if (highestActiveID == gl_SubgroupInvocationID) 
+  {
     uint localSize = localIndex + instanceVisible;
-
     globalIndex = atomicAdd(drawcall.instanceCount, localSize);
   }
   
   globalIndex = subgroupMax(globalIndex);
 
   if(instanceVisible > 0){
-      blockType[globalIndex + localIndex] = uint8_t(block);
+      blockData[globalIndex + localIndex].blockType = uint8_t(block);
+      blockData[globalIndex + localIndex].visibleFace = uint8_t(getVisibleFaces(ivec3(int(position.x), int(position.y), int(position.z))));
       transforms[globalIndex + localIndex] = vec4(position.x, position.y, position.z, 1.0f); 
   }
 }
