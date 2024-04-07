@@ -5,10 +5,12 @@
 
 struct DrawCall
 {
-      uint vertexCount;
-      uint instanceCount;
-      uint firstVertex;
-      uint firstInstance;
+    uint vertexCount;
+    uint instanceCount;
+    uint firstVertex;
+    uint firstInstance;
+    uint globalIndexTransform;
+    uint globalIndexFace;
 };
 
 layout (std140, binding = 0) readonly uniform projectionBuffer
@@ -28,9 +30,13 @@ layout (std140, binding = 2) buffer transformBuffer
 };
 
 struct BlockData{
+    uint index;
     uint8_t blockType;
     uint8_t visibleFace;
+    uint8_t padding;
+    uint8_t padding2;
 };
+
 layout (std430, binding = 3) buffer blockTypeBuffer
 {
     BlockData blockData[];
@@ -86,7 +92,7 @@ vec3 indexToPos()
 
 bool isInsideChunk(ivec3 position)
 {
-    return position.y >= 0 && position.y < chunkHeight && (position.x % chunkLocalSize) >= 0 && (position.x % chunkLocalSize) < chunkLocalSize && (position.z % chunkLocalSize) >= 0 && (position.z % chunkLocalSize) < chunkLocalSize;
+    return position.y >= 0 && position.y < chunkHeight && position.x >= 0 && position.x < chunkLocalSize && position.z >= 0 && position.z < chunkLocalSize;
 }
 
 uint toFlatIndex(ivec3 position)
@@ -125,26 +131,36 @@ bool isVisible(vec3 center, float extent)
     return visible;
 }
 
+const ivec3 direction[6] = ivec3[](
+    ivec3(-1, 0, 0),
+    ivec3(0, 0, 1),
+    ivec3(0, 1, 0),
+    ivec3(0, -1, 0),
+    ivec3(1, 0, 0),
+    ivec3(0, 0, -1)
+);
+
 // Reduce the number of visible faces to avoid z fighting
-int getVisibleFaces(ivec3 center)
+uint[6] getVisibleFaces(in ivec3 center, out uint faceCount)
 {
-	int visibleFaces = 0;
+    faceCount = 0;
 
-    ivec3 left = center + ivec3(-1, 0, 0);
-    ivec3 front = center + ivec3(0, 0, 1);
-    ivec3 top = center + ivec3(0, 1, 0);
-    ivec3 bottom = center + ivec3(0, -1, 0);
-    ivec3 right = center + ivec3(1, 0, 0);
-    ivec3 back = center + ivec3(0, 0, -1);
+    uint[6] result;
 
-    visibleFaces |= (isInsideChunk(left) ? (uint(blockTypeWorld[toFlatIndex(left)]) == uint(255) ? 1 : 0) : 1);
-    visibleFaces |= (isInsideChunk(front) ? (uint(blockTypeWorld[toFlatIndex(front)]) == uint(255) ? 2 : 0) : 2);
-    visibleFaces |= (isInsideChunk(top) ? (uint(blockTypeWorld[toFlatIndex(top)]) == uint(255) ? 4 : 0) : 4);
-    visibleFaces |= (isInsideChunk(bottom) ? (uint(blockTypeWorld[toFlatIndex(bottom)]) == uint(255) ? 8 : 0) : 8);
-    visibleFaces |= (isInsideChunk(right) ? (uint(blockTypeWorld[toFlatIndex(right)]) == uint(255) ? 16 : 0) : 16);
-    visibleFaces |= (isInsideChunk(back) ? (uint(blockTypeWorld[toFlatIndex(back)]) == uint(255) ? 32 : 0) : 32);
+    for(int i = 0; i < 6; ++i)
+    {
+        ivec3 neighbor = ivec3(center.x % chunkLocalSize, center.y, center.z % chunkLocalSize);
+        neighbor += direction[i];
+        bool neighborIsInsideChunk = isInsideChunk(neighbor);
+        bool neighborIsAir = neighborIsInsideChunk ? uint(blockTypeWorld[toFlatIndex(neighbor)]) == uint(255) : false;
+        if(!neighborIsInsideChunk || (neighborIsInsideChunk && neighborIsAir))
+        {
+            result[faceCount] = i;
+            ++faceCount;
+        }
+    }
 
-    return visibleFaces;
+    return result;
 }
 
 layout (local_size_x = LOCAL_SIZE_X, local_size_y = LOCAL_SIZE_Y, local_size_z = LOCAL_SIZE_Z) in;
@@ -165,23 +181,39 @@ void main()
 
   uint instanceVisible = isVisible(vec3(position.x + 0.5f, position.y + 0.5f, position.z + 0.5f), 0.5f) ? 1 : 0;
 
-  uint localIndex = subgroupExclusiveAdd(instanceVisible);
+  uint visibleFacesCount;
+  uint[6] visibleFaces = getVisibleFaces(ivec3(int(position.x), int(position.y), int(position.z)), visibleFacesCount);
+  visibleFacesCount = instanceVisible == 1 ? visibleFacesCount : 0u;
+
+  uint localIndex = subgroupExclusiveAdd(visibleFacesCount);
+  uint transformLocalIndex = subgroupExclusiveAdd(instanceVisible);
 
   uint highestActiveID = subgroupBallotFindMSB(subgroupBallot(true));
+
   uint globalIndex = 0;
+  uint transformGlobalIndex = 0;
 
-    // If we're the highest active ID, carve out a chunk from the global index
-  if (highestActiveID == gl_SubgroupInvocationID) 
+  // If we're the highest active ID, carve out a chunk from the global index
+  if (highestActiveID == gl_SubgroupInvocationID)
   {
-    uint localSize = localIndex + instanceVisible;
-    globalIndex = atomicAdd(drawcall.instanceCount, localSize);
+    uint localSize = localIndex + visibleFacesCount;
+    atomicAdd(drawcall.vertexCount, 6 * localSize);
+    globalIndex = atomicAdd(drawcall.globalIndexFace, localSize);
+    uint transformLocalSize = transformLocalIndex + instanceVisible;
+    transformGlobalIndex = atomicAdd(drawcall.globalIndexTransform, transformLocalSize);
   }
-  
-  globalIndex = subgroupMax(globalIndex);
 
-  if(instanceVisible > 0){
-      blockData[globalIndex + localIndex].blockType = uint8_t(block);
-      blockData[globalIndex + localIndex].visibleFace = uint8_t(getVisibleFaces(ivec3(int(position.x), int(position.y), int(position.z))));
-      transforms[globalIndex + localIndex] = vec4(position.x, position.y, position.z, 1.0f); 
+  globalIndex = subgroupMax(globalIndex);
+  transformGlobalIndex = subgroupMax(transformGlobalIndex);
+
+  if(instanceVisible > 0)
+  {
+      for(uint i = 0u; i < visibleFacesCount; ++i)
+      {
+          blockData[globalIndex + localIndex + i].index = transformGlobalIndex + transformLocalIndex;
+          blockData[globalIndex + localIndex + i].blockType = uint8_t(block);
+          blockData[globalIndex + localIndex + i].visibleFace = uint8_t(visibleFaces[i]);
+      }
+      transforms[transformGlobalIndex + transformLocalIndex] = vec4(position.x, position.y, position.z, 1.0f);
   }
 }

@@ -18,25 +18,136 @@ layout (std140, binding = 2) readonly buffer transformBuffer
 };
 
 struct BlockData{
+    uint index;
     uint8_t blockType;
     uint8_t visibleFace;
+    uint8_t padding;
+    uint8_t padding2;
 };
 layout (std430, binding = 3) readonly buffer blockTypeBuffer
 {
   BlockData blockData[];
 };
 
-layout (location = 0) in vec3 pos;
-layout (location = 1) in vec2 inTexCoord;
+const vec3 vertices[36] = vec3[](
+    vec3(-0.5f, -0.5f, -0.5f),
+    vec3(-0.5f, -0.5f, 0.5f),
+    vec3(-0.5f, 0.5f, 0.5f),
+    vec3(-0.5f, 0.5f, 0.5f),
+    vec3(-0.5f, 0.5f, -0.5f),
+    vec3(-0.5f, -0.5f, -0.5),
+
+    vec3(0.5f, 0.5f, 0.5f),
+    vec3(-0.5f, 0.5f, 0.5f),
+    vec3(-0.5f, -0.5f, 0.5f),
+    vec3(-0.5f, -0.5f, 0.5f),
+    vec3(0.5f, -0.5f, 0.5f),
+    vec3(0.5f, 0.5f, 0.5f),
+
+    vec3(-0.5f, 0.5f, -0.5f),
+    vec3(0.5f, 0.5f, 0.5f),
+    vec3(0.5f, 0.5f, -0.5f),
+    vec3(-0.5f, 0.5f, -0.5f),
+    vec3(-0.5f, 0.5f, 0.5f),
+    vec3(0.5f, 0.5f, 0.5f),
+
+    vec3(-0.5f, -0.5f, -0.5f),
+    vec3(0.5f, -0.5f, 0.5f),
+    vec3(-0.5f, -0.5f, 0.5f),
+    vec3(-0.5f, -0.5f, -0.5f),
+    vec3(0.5f, -0.5f, -0.5f),
+    vec3(0.5f, -0.5f, 0.5f),
+
+    vec3(0.5f, 0.5f, -0.5f),
+    vec3(0.5f, 0.5f, 0.5f),
+    vec3(0.5f, -0.5f, 0.5f),
+    vec3(0.5f, -0.5f, 0.5f),
+    vec3(0.5f, -0.5f, -0.5f),
+    vec3(0.5f, 0.5f, -0.5f),
+
+    vec3(0.5f, 0.5f, -0.5f),
+    vec3(-0.5f, -0.5f, -0.5f),
+    vec3(-0.5f, 0.5f, -0.5f),
+    vec3(-0.5f, -0.5f, -0.5f),
+    vec3(0.5f, 0.5f, -0.5f),
+    vec3(0.5f, -0.5f, -0.5f)
+);
+
+vec3 getVertex(int face, int vertex)
+{
+    return vertices[face * 6 + vertex];
+}
+
+const float oneSixth = 1.0f / 12.0f;
+const float twoSixth = 2.0f / 12.0f;
+const float threeSixth = 3.0f / 12.0f;
+const float fourSixth = 4.0f / 12.0f;
+const float fiveSixth = 5.0f / 12.0f;
+const float sixSixth = 6.0f / 12.0f;
+
+const float oneTwelveth = 1.0f / 12.0f;
+
+const vec2 uvs[36] =  vec2[]
+(
+    vec2(twoSixth, oneTwelveth),
+    vec2(oneSixth, oneTwelveth),
+    vec2(oneSixth, 0.0f),
+    vec2(oneSixth, 0.0f),
+    vec2(twoSixth, 0.0f),
+    vec2(twoSixth, oneTwelveth),
+
+    vec2(threeSixth, 0.0f),
+    vec2(twoSixth, 0.0f),
+    vec2(twoSixth, oneTwelveth),
+    vec2(twoSixth, oneTwelveth),
+    vec2(threeSixth, oneTwelveth),
+    vec2(threeSixth, 0.0f),
+
+    vec2(fiveSixth, 0.0f),
+    vec2(sixSixth, oneTwelveth),
+    vec2(sixSixth, 0.0f),
+    vec2(fiveSixth, 0.0f),
+    vec2(fiveSixth, oneTwelveth),
+    vec2(sixSixth, oneTwelveth),
+
+    vec2(0.0f, oneTwelveth),
+    vec2(oneSixth, 0.0f),
+    vec2(0.0f, 0.0f),
+    vec2(0.0f, oneTwelveth),
+    vec2(oneSixth, oneTwelveth),
+    vec2(oneSixth, 0.0f),
+
+    vec2(threeSixth, 0.0f),
+    vec2(fourSixth, 0.0f),
+    vec2(fourSixth, oneTwelveth),
+    vec2(fourSixth, oneTwelveth),
+    vec2(threeSixth, oneTwelveth),
+    vec2(threeSixth, 0.0f),
+
+    vec2(fourSixth, 0.0f),
+    vec2(fiveSixth, oneTwelveth),
+    vec2(fiveSixth, 0.0f),
+    vec2(fiveSixth, oneTwelveth),
+    vec2(fourSixth, 0.0f),
+    vec2(fourSixth, oneTwelveth)
+);
+
+vec2 getUV(int face, int vertex)
+{
+    return uvs[face * 6 + vertex];
+}
 
 layout (location = 0) out vec2 outTexCoord;
 
 void main()
 {
-  bool visible = bitfieldExtract(uint(blockData[gl_InstanceIndex].visibleFace), int(gl_VertexIndex / int(6)), int(1)) != 0;
-  outTexCoord = inTexCoord;
-  outTexCoord.y += uint(blockData[gl_InstanceIndex].blockType) * 0.083333f;
+  int faceIndex = int(gl_VertexIndex / int(6));
+  int vertex = int(gl_VertexIndex % int(6));
+  int faceDirection = int(blockData[faceIndex].visibleFace);
+
+  outTexCoord = getUV(faceDirection, vertex);
+  outTexCoord.y += uint(blockData[faceIndex].blockType) * 0.083333f;
   mat4 modelMatrix = mat4(1);
-  modelMatrix[3].xyzw = transforms[gl_InstanceIndex]; 
-  gl_Position = (projection * view * modelMatrix) * vec4(visible ? pos : vec3(0.0f, 0.0f, 0.0f), 1.0f);
+  modelMatrix[3].xyz = transforms[blockData[faceIndex].index].xyz; 
+  gl_Position = (projection * view * modelMatrix) * vec4(getVertex(faceDirection, vertex), 1.0f);
 }

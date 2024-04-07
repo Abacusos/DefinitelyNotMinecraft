@@ -46,7 +46,6 @@ class BlockRenderingModule {
   vk::raii::ShaderModule m_fragmentShaderModule{nullptr};
   vk::raii::ShaderModule m_drawCallGenerationComputeModule{nullptr};
 
-  dnm::BufferData m_vertexBuffer{nullptr};
   dnm::BufferData m_transformBuffer{nullptr};
   dnm::BufferData m_drawCommandBuffer{nullptr};
   dnm::BufferData m_worldDataBuffer{nullptr};

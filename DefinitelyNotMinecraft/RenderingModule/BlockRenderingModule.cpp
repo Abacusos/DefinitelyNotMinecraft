@@ -5,70 +5,12 @@
 
 #include <Core/GLMInclude.hpp>
 #include <Core/Profiler.hpp>
-#include <Shader/ShaderManager.hpp>
 #include <Core/StringInterner.hpp>
 #include <Logic/Camera.hpp>
+#include <Shader/ShaderManager.hpp>
 
 namespace dnm {
 namespace {
-struct VertexPT {
-  float x, y, z;  // Position data
-  float u, v;     // texture u,v
-};
-
-constexpr float oneSixth = 1.0f / 12.0f;
-constexpr float twoSixth = 2.0f / 12.0f;
-constexpr float threeSixth = 3.0f / 12.0f;
-constexpr float fourSixth = 4.0f / 12.0f;
-constexpr float fiveSixth = 5.0f / 12.0f;
-constexpr float sixSixth = 6.0f / 12.0f;
-
-constexpr float oneTwelveth = 1.0f / 12.0f;
-
-static const VertexPT texturedCubeData[] = {
-    // left face
-    {-0.5f, -0.5f, -0.5f, twoSixth, oneTwelveth},
-    {-0.5f, -0.5f, 0.5f, oneSixth, oneTwelveth},
-    {-0.5f, 0.5f, 0.5f, oneSixth, 0.0f},
-    {-0.5f, 0.5f, 0.5f, oneSixth, 0.0f},
-    {-0.5f, 0.5f, -0.5f, twoSixth, 0.0f},
-    {-0.5f, -0.5f, -0.5f, twoSixth, oneTwelveth},
-    // front face
-    {0.5f, 0.5f, 0.5f, threeSixth, 0.0f},
-    {-0.5f, 0.5f, 0.5f, twoSixth, 0.0f},
-    {-0.5f, -0.5f, 0.5f, twoSixth, oneTwelveth},
-    {-0.5f, -0.5f, 0.5f, twoSixth, oneTwelveth},
-    {0.5f, -0.5f, 0.5f, threeSixth, oneTwelveth},
-    {0.5f, 0.5f, 0.5f, threeSixth, 0.0f},
-    // top face
-    {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
-    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
-    {0.5f, 0.5f, -0.5f, sixSixth, 0.0f},
-    {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
-    {-0.5f, 0.5f, 0.5f, fiveSixth, oneTwelveth},
-    {0.5f, 0.5f, 0.5f, sixSixth, oneTwelveth},
-    // bottom face
-    {-0.5f, -0.5f, -0.5f, 0.0f, oneTwelveth},
-    {0.5f, -0.5f, 0.5f, oneSixth, 0.0f},
-    {-0.5f, -0.5f, 0.5f, 0.0f, 0.0f},
-    {-0.5f, -0.5f, -0.5f, 0.0f, oneTwelveth},
-    {0.5f, -0.5f, -0.5f, oneSixth, oneTwelveth},
-    {0.5f, -0.5f, 0.5f, oneSixth, 0.0f},
-    // right face
-    {0.5f, 0.5f, -0.5f, threeSixth, 0.0f},
-    {0.5f, 0.5f, 0.5f, fourSixth, 0.0f},
-    {0.5f, -0.5f, 0.5f, fourSixth, oneTwelveth},
-    {0.5f, -0.5f, 0.5f, fourSixth, oneTwelveth},
-    {0.5f, -0.5f, -0.5f, threeSixth, oneTwelveth},
-    {0.5f, 0.5f, -0.5f, threeSixth, 0.0f},
-    // back face
-    {0.5f, 0.5f, -0.5f, fourSixth, 0.0f},
-    {-0.5f, -0.5f, -0.5f, fiveSixth, oneTwelveth},
-    {-0.5f, 0.5f, -0.5f, fiveSixth, 0.0f},
-    {-0.5f, -0.5f, -0.5f, fiveSixth, oneTwelveth},
-    {0.5f, 0.5f, -0.5f, fourSixth, 0.0f},
-    {0.5f, -0.5f, -0.5f, fourSixth, oneTwelveth},
-};
 
 constexpr std::string_view vertexShader = "Shaders/World.vert";
 constexpr std::string_view fragmentShader = "Shaders/World.frag";
@@ -155,12 +97,11 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
                                     vk::PipelineStageFlagBits::eTransfer, {},
                                     {}, {}, barrier);
 
-      std::array srcOffsets{
-          vk::Offset3D{0, 0, 0}, vk::Offset3D{mipWidth, mipHeight, 1}};
-      std::array dstOffsets{
-          vk::Offset3D{0, 0, 0},
-          vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1,
-                       mipHeight > 1 ? mipHeight / 2 : 1, 1}};
+      std::array srcOffsets{vk::Offset3D{0, 0, 0},
+                            vk::Offset3D{mipWidth, mipHeight, 1}};
+      std::array dstOffsets{vk::Offset3D{0, 0, 0},
+                            vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1,
+                                         mipHeight > 1 ? mipHeight / 2 : 1, 1}};
 
       vk::ImageBlit blit{{vk::ImageAspectFlagBits::eColor, i - 1, 0, 1},
                          srcOffsets,
@@ -199,15 +140,8 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   });
   registerDebugMarker(device, m_textureData.imageData.image, "TextureSheet");
 
-  m_vertexBuffer = BufferData(physicalDevice, device, sizeof(texturedCubeData),
-                              vk::BufferUsageFlagBits::eVertexBuffer);
-  copyToDevice(m_vertexBuffer.deviceMemory,
-               std::span<const VertexPT>(texturedCubeData));
-
-  registerDebugMarker(device, m_vertexBuffer.buffer, "VertexBuffer Blocks");
-
   m_drawCommandBuffer =
-      BufferData(physicalDevice, device, 4 * sizeof(u32),
+      BufferData(physicalDevice, device, 6 * sizeof(u32),
                  vk::BufferUsageFlagBits::eStorageBuffer |
                      vk::BufferUsageFlagBits::eIndirectBuffer);
   registerDebugMarker(device, m_drawCommandBuffer.buffer, "Drawcommand Buffer");
@@ -257,15 +191,16 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
   const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
   const u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
 
-  const bool requiresChunkDataUpdate = updateBlockWorldData(camera->getPosition());
+  const bool requiresChunkDataUpdate =
+      updateBlockWorldData(camera->getPosition());
 
   const auto extent = m_renderer->getExtent();
-  const bool submitCompute = m_config->everyFrameGenerateDrawCalls || cameraMoved ||
-                       requiresChunkDataUpdate;
+  const bool submitCompute = m_config->everyFrameGenerateDrawCalls ||
+                             cameraMoved || requiresChunkDataUpdate;
   if (submitCompute) {
     updateCullingData(camera);
 
-    std::array<const u32, 4> empty{36u, 0u, 0u, 0u};
+    std::array<const u32, 6> empty{0u, 1u, 0u, 0u, 0u, 0u};
     copyToDevice<u32>(m_drawCommandBuffer.deviceMemory, std::span(empty));
 
     m_commandBufferCompute.reset();
@@ -316,8 +251,6 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
                                          *m_pipelineLayout, 0,
                                          {*m_descriptorSet}, nullptr);
 
-      m_commandBuffer.bindVertexBuffers(0, {*m_vertexBuffer.buffer}, {0});
-
       m_commandBuffer.setViewport(
           0, vk::Viewport(0.0f, 0.0f, static_cast<float>(extent.width),
                           static_cast<float>(extent.height), 1.0f, 0.0f));
@@ -350,53 +283,48 @@ vk::raii::Semaphore& BlockRenderingModule::getRenderingFinishedSemaphore() {
 void BlockRenderingModule::recreatePipeline() {
   m_renderer->waitIdle();
 
-  std::array
-      layout{
+  std::array layout{
 
-          // projection
-          std::tuple{
-              vk::DescriptorType::eUniformBuffer, 1u,
-              vk::ShaderStageFlagBits::eVertex |
-                  vk::ShaderStageFlagBits::eCompute},
-          // view
-          std::tuple{
-              vk::DescriptorType::eUniformBuffer, 1u,
-              vk::ShaderStageFlagBits::eVertex |
-                  vk::ShaderStageFlagBits::eCompute},
-          // transform
-          std::tuple{
-              vk::DescriptorType::eStorageBuffer, 1u,
-              vk::ShaderStageFlagBits::eVertex |
-                  vk::ShaderStageFlagBits::eCompute},
-          // block type
-          std::tuple{
-              vk::DescriptorType::eStorageBuffer, 1u,
-              vk::ShaderStageFlagBits::eVertex |
-                  vk::ShaderStageFlagBits::eCompute},
-          // world data block type
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eStorageBuffer, 1u,
-              vk::ShaderStageFlagBits::eCompute},
-          // draw call buffer
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eStorageBuffer, 1u,
-              vk::ShaderStageFlagBits::eCompute},
-          // constexpr chunk constants
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eUniformBuffer, 1u,
-              vk::ShaderStageFlagBits::eCompute},
-          // remap index
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eStorageBuffer, 1u,
-              vk::ShaderStageFlagBits::eCompute},
-          // culling data
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eUniformBuffer, 1u,
-              vk::ShaderStageFlagBits::eCompute},
-          // texture sampler
-          std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-              vk::DescriptorType::eCombinedImageSampler, 1,
-              vk::ShaderStageFlagBits::eFragment}};
+      // projection
+      std::tuple{
+          vk::DescriptorType::eUniformBuffer, 1u,
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
+      // view
+      std::tuple{
+          vk::DescriptorType::eUniformBuffer, 1u,
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
+      // transform
+      std::tuple{
+          vk::DescriptorType::eStorageBuffer, 1u,
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
+      // block type
+      std::tuple{
+          vk::DescriptorType::eStorageBuffer, 1u,
+          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
+      // world data block type
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eStorageBuffer, 1u,
+          vk::ShaderStageFlagBits::eCompute},
+      // draw call buffer
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eStorageBuffer, 1u,
+          vk::ShaderStageFlagBits::eCompute},
+      // constexpr chunk constants
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eUniformBuffer, 1u,
+          vk::ShaderStageFlagBits::eCompute},
+      // remap index
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eStorageBuffer, 1u,
+          vk::ShaderStageFlagBits::eCompute},
+      // culling data
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eUniformBuffer, 1u,
+          vk::ShaderStageFlagBits::eCompute},
+      // texture sampler
+      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+          vk::DescriptorType::eCombinedImageSampler, 1,
+          vk::ShaderStageFlagBits::eFragment}};
 
   std::array sizes{
       vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 4u},
@@ -418,8 +346,7 @@ void BlockRenderingModule::recreatePipeline() {
 
   m_graphicsPipeline = makeGraphicsPipeline(
       m_config, device, m_renderer->getPipelineCache(), m_vertexShaderModule,
-      nullptr, m_fragmentShaderModule, nullptr, sizeof(texturedCubeData[0]),
-      {{vk::Format::eR32G32B32Sfloat, 0}, {vk::Format::eR32G32Sfloat, 12}},
+      nullptr, m_fragmentShaderModule, nullptr, 0, {},
       vk::FrontFace::eCounterClockwise, true, m_pipelineLayout,
       m_renderer->getRenderPass());
   registerDebugMarker(device, m_graphicsPipeline,
@@ -438,43 +365,42 @@ void BlockRenderingModule::recreatePipeline() {
       m_renderer->getGlobalBuffer(GlobalBuffers::CameraView);
   assert(viewBuffer);
 
-  std::array
-      update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer, *projectionClipBuffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer, *viewBuffer, VK_WHOLE_SIZE,
-                 nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eStorageBuffer, m_transformBuffer.buffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eStorageBuffer, m_blockTypeBuffer.buffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eStorageBuffer, m_worldDataBuffer.buffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eStorageBuffer, m_drawCommandBuffer.buffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer,
-                 m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eStorageBuffer, m_chunkRemapIndex.buffer,
-                 VK_WHOLE_SIZE, nullptr},
-             std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
-                        vk::DeviceSize, const vk::raii::BufferView*>{
-                 vk::DescriptorType::eUniformBuffer, m_cullingData.buffer,
-                 VK_WHOLE_SIZE, nullptr}};
+  std::array update{std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer,
+                        *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer, *viewBuffer,
+                        VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eStorageBuffer,
+                        m_transformBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eStorageBuffer,
+                        m_blockTypeBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eStorageBuffer,
+                        m_worldDataBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eStorageBuffer,
+                        m_drawCommandBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer,
+                        m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eStorageBuffer,
+                        m_chunkRemapIndex.buffer, VK_WHOLE_SIZE, nullptr},
+                    std::tuple<vk::DescriptorType, const vk::raii::Buffer&,
+                               vk::DeviceSize, const vk::raii::BufferView*>{
+                        vk::DescriptorType::eUniformBuffer,
+                        m_cullingData.buffer, VK_WHOLE_SIZE, nullptr}};
 
   updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
 }
@@ -519,10 +445,10 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
   }
 }
 void BlockRenderingModule::recreateBlockDependentBuffers() {
-    const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
-    const u32 blockCountAllLoadedChunks = BlockWorld::perChunkBlockCount *
-                                  oneDimensionChunkCount *
-                                  oneDimensionChunkCount;
+  const u32 oneDimensionChunkCount = 1 + m_config->loadCountChunks * 2u;
+  const u32 blockCountAllLoadedChunks = BlockWorld::perChunkBlockCount *
+                                        oneDimensionChunkCount *
+                                        oneDimensionChunkCount;
 
   m_transformBuffer = m_renderer->createBuffer(
       blockCountAllLoadedChunks * sizeof(v4),
@@ -537,7 +463,7 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
           vk::MemoryPropertyFlagBits::eHostCoherent);
 
   m_blockTypeBuffer = m_renderer->createBuffer(
-      blockCountAllLoadedChunks * 2u * sizeof(u8),
+      static_cast<u64>(blockCountAllLoadedChunks) * (sizeof(u32) * 2u) * 6u,
       vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
@@ -546,7 +472,7 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
       BlockWorld::chunkLocalSize, BlockWorld::chunkHeight};
 
   m_chunkConstantsBuffer = m_renderer->createBuffer(
-      sizeof(constants), vk::BufferUsageFlagBits::eUniformBuffer,
+      sizeof(u32) * 4, vk::BufferUsageFlagBits::eUniformBuffer,
       "Chunk Constants",
       vk::MemoryPropertyFlagBits::eDeviceLocal |
           vk::MemoryPropertyFlagBits::eHostVisible);
@@ -567,17 +493,17 @@ bool BlockRenderingModule::updateBlockWorldData(v3 cameraPosition) {
   u32 workGroupCount = oneDimensionChunkCount * oneDimensionChunkCount;
 
   const glm::ivec2 cameraChunk{cameraPosition.x / BlockWorld::chunkLocalSize,
-                         cameraPosition.z / BlockWorld::chunkLocalSize};
+                               cameraPosition.z / BlockWorld::chunkLocalSize};
 
   const glm::ivec2 min{cameraChunk.x - m_config->loadCountChunks,
-                 cameraChunk.y - m_config->loadCountChunks};
+                       cameraChunk.y - m_config->loadCountChunks};
   const glm::ivec2 max{cameraChunk.x + m_config->loadCountChunks,
-                 cameraChunk.y + m_config->loadCountChunks};
+                       cameraChunk.y + m_config->loadCountChunks};
 
   bool chunkDirty = false;
   for (i32 z = min.y; z <= max.y; ++z) {
     for (i32 x = min.x; x <= max.x; ++x) {
-        const glm::ivec2 chunk{x, z};
+      const glm::ivec2 chunk{x, z};
       if (m_blockWorld->isRenderingDirty(chunk)) {
         chunkDirty = true;
         m_blockWorld->clearRenderingDirty(chunk);
@@ -586,7 +512,8 @@ bool BlockRenderingModule::updateBlockWorldData(v3 cameraPosition) {
   }
 
   const bool requiresChunkDataUpdate = cameraChunk != m_cameraChunkLastFrame ||
-                                 !m_allChunksUploadedLastFrame || chunkDirty;
+                                       !m_allChunksUploadedLastFrame ||
+                                       chunkDirty;
 
   if (requiresChunkDataUpdate) {
     m_allChunksUploadedLastFrame = true;
@@ -594,14 +521,14 @@ bool BlockRenderingModule::updateBlockWorldData(v3 cameraPosition) {
 
     std::vector<u32> remapIndex;
     remapIndex.reserve(workGroupCount);
-    std::vector blockData(
-        BlockWorld::perChunkBlockCount * workGroupCount, BlockWorld::air);
+    std::vector blockData(BlockWorld::perChunkBlockCount * workGroupCount,
+                          BlockWorld::air);
 
     u32 counter = 0u;
     for (i32 z = min.y; z <= max.y; ++z) {
       for (i32 x = min.x; x <= max.x; ++x) {
-          const glm::ivec2 chunk{x, z};
-          const auto state = m_blockWorld->requestChunk(chunk);
+        const glm::ivec2 chunk{x, z};
+        const auto state = m_blockWorld->requestChunk(chunk);
         if (state != BlockWorld::ChunkState::FinishedGeneration) {
           m_allChunksUploadedLastFrame = false;
           ++counter;
@@ -636,13 +563,12 @@ Plane convertToPlane(v3 p1, v3 normal) {
 }
 }  // namespace
 
-void BlockRenderingModule::updateCullingData(const Camera* camera) const
-{
+void BlockRenderingModule::updateCullingData(const Camera* camera) const {
   ZoneScoped;
 
   const float zNear = m_config->nearPlane;
   const float zFar = m_config->farPlane;
-    
+
   const v3 forward = camera->getForward();
   const v3 up = camera->getUp();
   const v3 right = camera->getRight();
@@ -658,21 +584,16 @@ void BlockRenderingModule::updateCullingData(const Camera* camera) const
   data.cullingEnabled = m_config->cullingEnabled;
 
   const v3 cameraPosition = camera->getPosition();
-  data.frustum[0] =
-      convertToPlane(cameraPosition + zNear * forward, forward);
+  data.frustum[0] = convertToPlane(cameraPosition + zNear * forward, forward);
   data.frustum[1] = convertToPlane(cameraPosition + frontMultFar, -forward);
   data.frustum[2] = convertToPlane(
-      cameraPosition,
-      glm::cross(frontMultFar - right * halfHSide, up));
+      cameraPosition, glm::cross(frontMultFar - right * halfHSide, up));
   data.frustum[3] = convertToPlane(
-      cameraPosition,
-      glm::cross(up, frontMultFar + right * halfHSide));
+      cameraPosition, glm::cross(up, frontMultFar + right * halfHSide));
   data.frustum[4] = convertToPlane(
-      cameraPosition,
-      glm::cross(right, frontMultFar - up * halfVSide));
+      cameraPosition, glm::cross(right, frontMultFar - up * halfVSide));
   data.frustum[5] = convertToPlane(
-      cameraPosition,
-      glm::cross(frontMultFar + up * halfVSide, right));
+      cameraPosition, glm::cross(frontMultFar + up * halfVSide, right));
 
   copyToDevice(m_cullingData.deviceMemory,
                std::span<const CullingData>(&data, 1u));
