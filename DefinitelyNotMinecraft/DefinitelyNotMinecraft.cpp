@@ -7,6 +7,7 @@
 #include <RenderingModule/GizmoRenderingModule.hpp>
 #include <Logic/Imgui.hpp>
 #include <RenderingModule/ImguiRenderingModule.hpp>
+#include <RenderingModule/ForwardRenderingModule.hpp>
 #include <Logic/Input.hpp>
 #include <Core/Profiler.hpp>
 #include <Rendering/Renderer.hpp>
@@ -26,6 +27,8 @@ int main(int /*argc*/, char** /*argv*/) {
     Imgui imgui(&config, window);
 
     BlockRenderingModule blockRenderingModule{
+        &config, &renderer, &shaderManager, &world, &interner};
+    ForwardRenderingModule forwardRenderingModule{
         &config, &renderer, &shaderManager, &world, &interner};
     ImguiRenderingModule imguiModule{&config, &renderer};
     GizmoRenderingModule gizmoRenderingModule{
@@ -57,9 +60,11 @@ int main(int /*argc*/, char** /*argv*/) {
 
       blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
                                      deltaTime, cameraMoved, &camera);
+      forwardRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
+                                       blockRenderingModule.getRenderingFinishedSemaphore());
       imguiModule.drawFrame(
           renderer.getFrameBuffer(imageIndex), deltaTime,
-          blockRenderingModule.getRenderingFinishedSemaphore());
+          forwardRenderingModule.getRenderingFinishedSemaphore());
       gizmoRenderingModule.drawFrame(
           renderer.getFrameBuffer(imageIndex), deltaTime,
           imguiModule.getRenderingFinishedSemaphore());

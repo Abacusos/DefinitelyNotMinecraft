@@ -14,6 +14,16 @@ class Handle {
   IndexType index = IndexType(0);
 
   operator bool() const { return index != invalidValue; };
+
+  friend bool operator==(const Handle& lhs, const Handle& rhs)
+  {
+      return lhs.index == rhs.index;
+  }
+
+  friend bool operator!=(const Handle& lhs, const Handle& rhs)
+  {
+      return !(lhs == rhs);
+  }
 };
 
 class String;

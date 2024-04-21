@@ -204,7 +204,7 @@ std::vector<char const*> dnm::gatherLayers(
 }
 
 std::vector<std::string> dnm::getDeviceExtensions() {
-  return {VK_KHR_SWAPCHAIN_EXTENSION_NAME};
+  return {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_KHR_8BIT_STORAGE_EXTENSION_NAME};
 }
 
 std::vector<std::string> dnm::getInstanceExtensions() {

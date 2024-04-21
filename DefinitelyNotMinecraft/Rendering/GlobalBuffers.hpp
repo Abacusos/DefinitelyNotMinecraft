@@ -4,6 +4,6 @@
 
 namespace dnm {
 
-enum class GlobalBuffers : u8 { ProjectionClip, CameraView, Undefined };
+enum class GlobalBuffers : u8 { ProjectionClip, CameraView, Transform, BlockType, DrawCommand, Undefined };
 
 }

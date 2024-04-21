@@ -2,27 +2,23 @@
 
 #include <Logic/BlockWorld.hpp>
 #include <Core/Config.hpp>
+#include <Core/GPUProfiller.hpp>
 #include <Core/Handle.hpp>
 #include <Rendering/Renderer.hpp>
 
 namespace dnm {
 
+class Camera;
 class ShaderManager;
 class StringInterner;
 
-class GizmoRenderingModule {
+class ForwardRenderingModule {
  public:
-  explicit GizmoRenderingModule(Config* config, Renderer* renderer,
+  explicit ForwardRenderingModule(Config* config, Renderer* renderer,
                                 ShaderManager* manager, BlockWorld* blockWorld,
                                 StringInterner* interner);
-  
-  struct VertexGizmo {
-    v3 x, y, z;  // Position data
-    v3 r, g, b;  // color
-  };
-  void drawLines(std::span<VertexGizmo> lineElements);
 
-  void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
+  void drawFrame(const vk::raii::Framebuffer& frameBuffer,
                  const vk::raii::Semaphore& previousRenderStepFinished);
 
   vk::raii::Semaphore& getRenderingFinishedSemaphore();
@@ -40,14 +36,13 @@ class GizmoRenderingModule {
 
   ShaderHandle m_vertexHandle;
   ShaderHandle m_fragmentHandle;
-  ShaderHandle m_computeHandle;
 
   vk::raii::ShaderModule m_vertexShaderModule{nullptr};
   vk::raii::ShaderModule m_fragmentShaderModule{nullptr};
 
-  dnm::BufferData m_vertexBuffer{nullptr};
+  dnm::BufferData m_lightBuffer{nullptr};
+  dnm::TextureData m_textureData{nullptr};
 
-  vk::raii::RenderPass m_renderPass{nullptr};
   vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
   vk::raii::PipelineLayout m_pipelineLayout{nullptr};
 
@@ -58,8 +53,6 @@ class GizmoRenderingModule {
   vk::raii::CommandBuffer m_commandBuffer{nullptr};
   vk::raii::Semaphore m_renderingFinished{nullptr};
 
-  constexpr static u32 reservedGizmoSpace = 4000;
-  std::array<VertexGizmo, reservedGizmoSpace> m_verticesGizmo;
-  u32 m_occupiedVertexPlaces = 0u;
+  GPUProfilerContext m_renderingProfilerContext;
 };
 }  // namespace dnm

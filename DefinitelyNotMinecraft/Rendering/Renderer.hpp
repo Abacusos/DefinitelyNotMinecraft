@@ -31,6 +31,7 @@ class Renderer {
   const vk::raii::Queue& getComputeQueue() const;
   const vk::raii::Queue& getGraphicsQueue() const;
   const vk::raii::Framebuffer& getFrameBuffer(u32 imageIndex) const;
+  const vk::raii::DescriptorPool& getDescriptorPool() const;
 
   vk::Format getColorFormat() const;
 
@@ -75,6 +76,7 @@ class Renderer {
   SurfaceData m_surfaceData{nullptr};
   vk::raii::Device m_device{nullptr};
   vk::raii::CommandPool m_commandPool{nullptr};
+  vk::raii::DescriptorPool m_descriptorPool{nullptr};
   vk::raii::Queue m_computeQueue{nullptr};
   vk::raii::Queue m_graphicsQueue{nullptr};
   vk::raii::Queue m_presentQueue{nullptr};

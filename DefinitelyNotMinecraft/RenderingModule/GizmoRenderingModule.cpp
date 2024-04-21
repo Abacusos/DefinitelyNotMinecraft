@@ -144,9 +144,8 @@ void GizmoRenderingModule::recreatePipeline() {
   m_pipelineLayout =
       vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
-  m_descriptorPool = makeDescriptorPool(device, sizes);
   auto sets = vk::raii::DescriptorSets(
-      device, {*m_descriptorPool, *m_descriptorSetLayout});
+      device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
   m_descriptorSet = std::move(sets.front());
 
   m_graphicsPipeline = makeGraphicsPipeline(

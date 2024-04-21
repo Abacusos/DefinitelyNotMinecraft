@@ -10,22 +10,6 @@ ImguiRenderingModule::ImguiRenderingModule(Config* config, Renderer* renderer)
     : m_config{config}, m_renderer{renderer} {
   const auto& device = m_renderer->getDevice();
 
-  std::array sizes{
-      vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 1000u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1000u},
-  };
-
-  m_descriptorPool = makeDescriptorPool(device, sizes);
-
   m_renderPass =
       makeRenderPass(device, renderer->getColorFormat(), vk::Format::eD32Sfloat,
                      vk::AttachmentLoadOp::eLoad);
@@ -37,7 +21,7 @@ ImguiRenderingModule::ImguiRenderingModule(Config* config, Renderer* renderer)
   init_info.QueueFamily = renderer->getIndices().graphicsQueueFamilyIndex;
   init_info.Queue = *renderer->getGraphicsQueue();
   init_info.PipelineCache = *renderer->getPipelineCache();
-  init_info.DescriptorPool = *m_descriptorPool;
+  init_info.DescriptorPool = *m_renderer->getDescriptorPool();
   init_info.Subpass = 0;
   init_info.MinImageCount = 2;
   init_info.ImageCount = 2;
@@ -144,7 +128,7 @@ void ImguiRenderingModule::uploadFontTexture() {
       vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
   auto sets = vk::raii::DescriptorSets(
-      device, {*m_descriptorPool, *m_descriptorSetLayout});
+      device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
   m_descriptorSet = std::move(sets.front());
 
   updateDescriptorSets(device, m_descriptorSet, {}, {m_fontTexture});

@@ -1,19 +1,13 @@
-#include <RenderingModule/BlockRenderingModule.hpp>
-
-#define STB_IMAGE_IMPLEMENTATION
-#include <stb_image.h>
-
 #include <Core/GLMInclude.hpp>
 #include <Core/Profiler.hpp>
 #include <Core/StringInterner.hpp>
 #include <Logic/Camera.hpp>
+#include <RenderingModule/BlockRenderingModule.hpp>
 #include <Shader/ShaderManager.hpp>
 
 namespace dnm {
 namespace {
 
-constexpr std::string_view vertexShader = "Shaders/World.vert";
-constexpr std::string_view fragmentShader = "Shaders/World.frag";
 constexpr std::string_view computeShader =
     "Shaders/DrawCallGenerationWorld.comp";
 
@@ -44,107 +38,17 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   const auto& physicalDevice = m_renderer->getPhysicalDevice();
   const auto& device = m_renderer->getDevice();
 
-  m_vertexHandle = m_shaderManager->registerShaderFile(
-      m_interner->addOrGetString(vertexShader),
-      vk::ShaderStageFlagBits::eVertex);
-  m_fragmentHandle = m_shaderManager->registerShaderFile(
-      m_interner->addOrGetString(fragmentShader),
-      vk::ShaderStageFlagBits::eFragment);
   m_computeHandle = m_shaderManager->registerShaderFile(
       m_interner->addOrGetString(computeShader),
       vk::ShaderStageFlagBits::eCompute);
-
-  int texWidth, texHeight, texChannels;
-  stbi_uc* pixels = stbi_load("Textures/TextureSheet.png", &texWidth,
-                              &texHeight, &texChannels, STBI_rgb_alpha);
-
-  // Preventing the last few mipmaps due to artifacts in the distance where the
-  // colors are mixed to gray then
-  const u32 mipLevels =
-      static_cast<u32>(std::floor(std::log2(std::max(texWidth, texHeight)))) -
-      3;
-
-  m_textureData =
-      TextureData(physicalDevice, device, vk::Extent2D(texWidth, texHeight),
-                  vk::Format::eR8G8B8A8Unorm,
-                  vk::SamplerAddressMode::eClampToEdge, mipLevels,
-                  vk::ImageUsageFlagBits::eTransferSrc |
-                      vk::ImageUsageFlagBits::eTransferDst,
-                  {}, false, true);
-  m_renderer->oneTimeSubmit([&](const vk::raii::CommandBuffer& commandBuffer) {
-    m_textureData.setImage(commandBuffer, pixels, false, mipLevels);
-
-    vk::ImageMemoryBarrier barrier{};
-    barrier.image = *m_textureData.imageData.image;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eColor;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.subresourceRange.levelCount = 1;
-
-    i32 mipWidth = texWidth;
-    i32 mipHeight = texHeight;
-
-    for (u32 i = 1; i < mipLevels; i++) {
-      barrier.subresourceRange.baseMipLevel = i - 1;
-      barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-      barrier.newLayout = vk::ImageLayout::eTransferSrcOptimal;
-      barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-      barrier.dstAccessMask = vk::AccessFlagBits::eTransferRead;
-
-      commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                    vk::PipelineStageFlagBits::eTransfer, {},
-                                    {}, {}, barrier);
-
-      std::array srcOffsets{vk::Offset3D{0, 0, 0},
-                            vk::Offset3D{mipWidth, mipHeight, 1}};
-      std::array dstOffsets{vk::Offset3D{0, 0, 0},
-                            vk::Offset3D{mipWidth > 1 ? mipWidth / 2 : 1,
-                                         mipHeight > 1 ? mipHeight / 2 : 1, 1}};
-
-      vk::ImageBlit blit{{vk::ImageAspectFlagBits::eColor, i - 1, 0, 1},
-                         srcOffsets,
-                         {vk::ImageAspectFlagBits::eColor, i, 0, 1},
-                         dstOffsets};
-
-      commandBuffer.blitImage(
-          *m_textureData.imageData.image, vk::ImageLayout::eTransferSrcOptimal,
-          *m_textureData.imageData.image, vk::ImageLayout::eTransferDstOptimal,
-          blit, vk::Filter::eLinear);
-
-      barrier.oldLayout = vk::ImageLayout::eTransferSrcOptimal;
-      barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-      barrier.srcAccessMask = vk::AccessFlagBits::eTransferRead;
-      barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-      commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                    vk::PipelineStageFlagBits::eFragmentShader,
-                                    {}, {}, {}, barrier);
-
-      if (mipWidth > 1) mipWidth /= 2;
-      if (mipHeight > 1) mipHeight /= 2;
-    }
-
-    barrier.subresourceRange.baseMipLevel = mipLevels - 1;
-    barrier.oldLayout = vk::ImageLayout::eTransferDstOptimal;
-    barrier.newLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
-    barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
-    barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
-
-    commandBuffer.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer,
-                                  vk::PipelineStageFlagBits::eFragmentShader,
-                                  {}, {}, {}, barrier);
-
-    stbi_image_free(pixels);
-  });
-  registerDebugMarker(device, m_textureData.imageData.image, "TextureSheet");
 
   m_drawCommandBuffer =
       BufferData(physicalDevice, device, 6 * sizeof(u32),
                  vk::BufferUsageFlagBits::eStorageBuffer |
                      vk::BufferUsageFlagBits::eIndirectBuffer);
   registerDebugMarker(device, m_drawCommandBuffer.buffer, "Drawcommand Buffer");
+  m_drawCommandRegistration = renderer->registerRAIIBuffer(
+      GlobalBuffers::DrawCommand, m_drawCommandBuffer);
 
   recreateBlockDependentBuffers();
 
@@ -154,19 +58,10 @@ BlockRenderingModule::BlockRenderingModule(Config* config, Renderer* renderer,
   m_computeProfilerContext = GPUProfilerContext(
       m_renderer, *m_renderer->getComputeQueue(), m_commandBufferCompute);
 
-  m_commandBuffer = m_renderer->getCommandBuffer();
-  registerDebugMarker(device, m_commandBuffer,
-                      "Block Rendering Command Buffer");
-  m_renderingProfilerContext = GPUProfilerContext(
-      m_renderer, *m_renderer->getGraphicsQueue(), m_commandBuffer);
-
   m_drawCallGenerationFinished =
       vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
   registerDebugMarker(device, m_drawCallGenerationFinished,
                       "Drawcall generation compute finished");
-
-  m_renderingFinished = vk::raii::Semaphore(device, vk::SemaphoreCreateInfo());
-  registerDebugMarker(device, m_renderingFinished, "Block rendering finished");
 
   m_cullingData = m_renderer->createBuffer(
       sizeof(CullingData), vk::BufferUsageFlagBits::eUniformBuffer,
@@ -194,142 +89,76 @@ void BlockRenderingModule::drawFrame(const vk::raii::Framebuffer& frameBuffer,
   const bool requiresChunkDataUpdate =
       updateBlockWorldData(camera->getPosition());
 
-  const auto extent = m_renderer->getExtent();
-  const bool submitCompute = m_config->everyFrameGenerateDrawCalls ||
-                             cameraMoved || requiresChunkDataUpdate;
-  if (submitCompute) {
-    updateCullingData(camera);
+  updateCullingData(camera);
 
-    std::array<const u32, 6> empty{0u, 1u, 0u, 0u, 0u, 0u};
-    copyToDevice<u32>(m_drawCommandBuffer.deviceMemory, std::span(empty));
+  std::array<const u32, 6> empty{0u, 1u, 0u, 0u, 0u, 0u};
+  copyToDevice<u32>(m_drawCommandBuffer.deviceMemory, std::span(empty));
 
-    m_commandBufferCompute.reset();
-    {
-      m_commandBufferCompute.begin(vk::CommandBufferBeginInfo());
-      TracyVkZone(m_computeProfilerContext.context, *m_commandBufferCompute,
-                  "Generate Draw Calls");
-      TracyVkCollect(m_computeProfilerContext.context, *m_commandBufferCompute);
-
-      m_commandBufferCompute.bindPipeline(vk::PipelineBindPoint::eCompute,
-                                          *m_computePipeline);
-      m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
-                                                *m_pipelineLayout, 0u,
-                                                {*m_descriptorSet}, nullptr);
-      m_commandBufferCompute.dispatch(workGroupCount, BlockWorld::chunkHeight,
-                                      1);
-    }
-    m_commandBufferCompute.end();
-
-    const auto computeQueue = m_renderer->getComputeQueue();
-    const vk::SubmitInfo computeInfo{
-        {}, {}, *m_commandBufferCompute, *m_drawCallGenerationFinished};
-    computeQueue.submit(computeInfo);
-  }
-
+  m_commandBufferCompute.reset();
   {
-    std::array<vk::ClearValue, 2> clearValues;
-    clearValues[0].color = vk::ClearColorValue(0.2f, 0.2f, 0.2f, 0.2f);
-    clearValues[1].depthStencil = vk::ClearDepthStencilValue(0.0f, 0);
+    m_commandBufferCompute.begin(vk::CommandBufferBeginInfo());
+    TracyVkZone(m_computeProfilerContext.context, *m_commandBufferCompute,
+                "Generate Draw Calls");
+    TracyVkCollect(m_computeProfilerContext.context, *m_commandBufferCompute);
 
-    const auto& pass = m_renderer->getRenderPass();
-    const vk::RenderPassBeginInfo renderPassBeginInfo(
-        *pass, *frameBuffer, vk::Rect2D(vk::Offset2D(0, 0), extent),
-        clearValues);
-
-    m_commandBuffer.reset();
-    {
-      m_commandBuffer.begin(vk::CommandBufferBeginInfo());
-      TracyVkZone(m_renderingProfilerContext.context, *m_commandBuffer,
-                  "Draw Blocks");
-      TracyVkCollect(m_renderingProfilerContext.context, *m_commandBuffer);
-
-      m_commandBuffer.beginRenderPass(renderPassBeginInfo,
-                                      vk::SubpassContents::eInline);
-      m_commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics,
-                                   *m_graphicsPipeline);
-      m_commandBuffer.bindDescriptorSets(vk::PipelineBindPoint::eGraphics,
-                                         *m_pipelineLayout, 0,
-                                         {*m_descriptorSet}, nullptr);
-
-      m_commandBuffer.setViewport(
-          0, vk::Viewport(0.0f, 0.0f, static_cast<float>(extent.width),
-                          static_cast<float>(extent.height), 1.0f, 0.0f));
-      m_commandBuffer.setScissor(0, vk::Rect2D(vk::Offset2D(0, 0), extent));
-      m_commandBuffer.drawIndirect(*m_drawCommandBuffer.buffer, 0u, 1u,
-                                   sizeof(u32) * 4);
-
-      m_commandBuffer.endRenderPass();
-    }
-    m_commandBuffer.end();
-
-    const auto graphicsQueue = m_renderer->getGraphicsQueue();
-
-    vk::SubmitInfo graphicsInfo{{}, {}, *m_commandBuffer, *m_renderingFinished};
-    if (submitCompute) {
-      graphicsInfo.setWaitSemaphores(*m_drawCallGenerationFinished);
-      vk::PipelineStageFlags waitDestinationStageMask(
-          vk::PipelineStageFlagBits::eComputeShader);
-      graphicsInfo.setWaitDstStageMask(waitDestinationStageMask);
-    }
-
-    graphicsQueue.submit(graphicsInfo);
+    m_commandBufferCompute.bindPipeline(vk::PipelineBindPoint::eCompute,
+                                        *m_computePipeline);
+    m_commandBufferCompute.bindDescriptorSets(vk::PipelineBindPoint::eCompute,
+                                              *m_pipelineLayout, 0u,
+                                              {*m_descriptorSet}, nullptr);
+    m_commandBufferCompute.dispatch(workGroupCount, BlockWorld::chunkHeight, 1);
   }
+  m_commandBufferCompute.end();
+
+  const auto computeQueue = m_renderer->getComputeQueue();
+  const vk::SubmitInfo computeInfo{
+      {}, {}, *m_commandBufferCompute, *m_drawCallGenerationFinished};
+  computeQueue.submit(computeInfo);
 }
 
 vk::raii::Semaphore& BlockRenderingModule::getRenderingFinishedSemaphore() {
-  return m_renderingFinished;
+  return m_drawCallGenerationFinished;
 }
 
 void BlockRenderingModule::recreatePipeline() {
   m_renderer->waitIdle();
 
-  std::array layout{
-
-      // projection
-      std::tuple{
-          vk::DescriptorType::eUniformBuffer, 1u,
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // view
-      std::tuple{
-          vk::DescriptorType::eUniformBuffer, 1u,
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // transform
-      std::tuple{
-          vk::DescriptorType::eStorageBuffer, 1u,
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // block type
-      std::tuple{
-          vk::DescriptorType::eStorageBuffer, 1u,
-          vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // world data block type
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eStorageBuffer, 1u,
-          vk::ShaderStageFlagBits::eCompute},
-      // draw call buffer
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eStorageBuffer, 1u,
-          vk::ShaderStageFlagBits::eCompute},
-      // constexpr chunk constants
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eUniformBuffer, 1u,
-          vk::ShaderStageFlagBits::eCompute},
-      // remap index
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eStorageBuffer, 1u,
-          vk::ShaderStageFlagBits::eCompute},
-      // culling data
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eUniformBuffer, 1u,
-          vk::ShaderStageFlagBits::eCompute},
-      // texture sampler
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
-          vk::DescriptorType::eCombinedImageSampler, 1,
-          vk::ShaderStageFlagBits::eFragment}};
-
-  std::array sizes{
-      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 4u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 5u},
-      vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1u}};
+  std::array layout{// projection
+                    std::tuple{vk::DescriptorType::eUniformBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute},
+                    // view
+                    std::tuple{vk::DescriptorType::eUniformBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute},
+                    // transform
+                    std::tuple{vk::DescriptorType::eStorageBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute},
+                    // block type
+                    std::tuple{vk::DescriptorType::eStorageBuffer, 1u,
+                               vk::ShaderStageFlagBits::eVertex |
+                                   vk::ShaderStageFlagBits::eCompute},
+                    // world data block type
+                    std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+                        vk::DescriptorType::eStorageBuffer, 1u,
+                        vk::ShaderStageFlagBits::eCompute},
+                    // draw call buffer
+                    std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+                        vk::DescriptorType::eStorageBuffer, 1u,
+                        vk::ShaderStageFlagBits::eCompute},
+                    // constexpr chunk constants
+                    std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+                        vk::DescriptorType::eUniformBuffer, 1u,
+                        vk::ShaderStageFlagBits::eCompute},
+                    // remap index
+                    std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+                        vk::DescriptorType::eStorageBuffer, 1u,
+                        vk::ShaderStageFlagBits::eCompute},
+                    // culling data
+                    std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>{
+                        vk::DescriptorType::eUniformBuffer, 1u,
+                        vk::ShaderStageFlagBits::eCompute}};
 
   const auto& device = m_renderer->getDevice();
 
@@ -339,18 +168,9 @@ void BlockRenderingModule::recreatePipeline() {
   m_pipelineLayout =
       vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
-  m_descriptorPool = makeDescriptorPool(device, sizes);
   auto sets = vk::raii::DescriptorSets(
-      device, {*m_descriptorPool, *m_descriptorSetLayout});
+      device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
   m_descriptorSet = std::move(sets.front());
-
-  m_graphicsPipeline = makeGraphicsPipeline(
-      m_config, device, m_renderer->getPipelineCache(), m_vertexShaderModule,
-      nullptr, m_fragmentShaderModule, nullptr, 0, {},
-      vk::FrontFace::eCounterClockwise, true, m_pipelineLayout,
-      m_renderer->getRenderPass());
-  registerDebugMarker(device, m_graphicsPipeline,
-                      "Block Rendering Graphics Pipeline");
 
   m_computePipeline = makeComputePipeline(
       device, m_renderer->getPipelineCache(), m_drawCallGenerationComputeModule,
@@ -402,29 +222,11 @@ void BlockRenderingModule::recreatePipeline() {
                         vk::DescriptorType::eUniformBuffer,
                         m_cullingData.buffer, VK_WHOLE_SIZE, nullptr}};
 
-  updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
+  updateDescriptorSets(device, m_descriptorSet, update);
 }
 
 void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
   const auto& device = m_renderer->getDevice();
-  auto& physicalDevice = m_renderer->getPhysicalDevice();
-  auto prop = physicalDevice.getProperties();
-
-  bool anyUpdated = false;
-
-  auto processShader = [this, &device, &anyUpdated, &force](
-                           ShaderHandle handle,
-                           vk::raii::ShaderModule& shaderModule,
-                           std::span<ShaderManager::Define> defines = {}) {
-    if (m_shaderManager->wasContentUpdated(handle) || force) {
-      auto recompiledVertexShader =
-          m_shaderManager->getCompiledVersion(device, handle, defines);
-      if (recompiledVertexShader) {
-        anyUpdated = true;
-        shaderModule = std::move(recompiledVertexShader.value());
-      }
-    }
-  };
 
   std::array defines = {
       ShaderManager::Define{m_interner->addOrGetString(localWGSizeX),
@@ -434,14 +236,17 @@ void BlockRenderingModule::recompileShadersIfNecessary(bool force) {
       ShaderManager::Define{m_interner->addOrGetString(localWGSizeZ),
                             std::to_string(m_blockWorld->chunkLocalSize)}};
 
-  processShader(m_vertexHandle, m_vertexShaderModule);
-  processShader(m_fragmentHandle, m_fragmentShaderModule);
-  processShader(m_computeHandle, m_drawCallGenerationComputeModule, defines);
+  if (m_shaderManager->wasContentUpdated(m_computeHandle) || force) {
+    auto recompiledVertexShader =
+        m_shaderManager->getCompiledVersion(device, m_computeHandle, defines);
+    if (recompiledVertexShader) {
+      m_drawCallGenerationComputeModule =
+          std::move(recompiledVertexShader.value());
 
-  if (anyUpdated) {
-    recreatePipeline();
-    std::cout << "Successfully recompiled shaders and recreated the pipeline "
-                 "for the block rendering module.\n";
+      recreatePipeline();
+      std::cout << "Successfully recompiled shaders and recreated the pipeline "
+                   "for the block rendering module.\n";
+    }
   }
 }
 void BlockRenderingModule::recreateBlockDependentBuffers() {
@@ -455,17 +260,22 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
       vk::BufferUsageFlagBits::eStorageBuffer, "Instance Transform Buffer",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
 
+  m_transformRegistration = m_renderer->registerRAIIBuffer(
+      GlobalBuffers::Transform, m_transformBuffer);
+
   m_worldDataBuffer = m_renderer->createBuffer(
       blockCountAllLoadedChunks * sizeof(u8),
       vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks",
       vk::MemoryPropertyFlagBits::eDeviceLocal |
-          vk::MemoryPropertyFlagBits::eHostVisible |
-          vk::MemoryPropertyFlagBits::eHostCoherent);
+          vk::MemoryPropertyFlagBits::eHostVisible);
 
   m_blockTypeBuffer = m_renderer->createBuffer(
       static_cast<u64>(blockCountAllLoadedChunks) * (sizeof(u32) * 2u) * 6u,
       vk::BufferUsageFlagBits::eStorageBuffer, "Block Data For Draw Command",
       vk::MemoryPropertyFlagBits::eDeviceLocal);
+
+  m_blockTypeRegistration = m_renderer->registerRAIIBuffer(
+      GlobalBuffers::BlockType, m_blockTypeBuffer);
 
   std::array<u32, 4u> constants{
       m_config->loadCountChunks, oneDimensionChunkCount,

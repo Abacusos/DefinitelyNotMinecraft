@@ -1,14 +1,13 @@
 #pragma once
 
+#include <Shader/ReflectedShader.hpp>
+#include <Shader/ShaderReflector.hpp>
 #include <atomic>
 #include <filesystem>
 #include <mutex>
 #include <span>
 #include <vector>
 #include <vulkan/vulkan_raii.hpp>
-
-#include <Shader/ReflectedShader.hpp>
-#include <Shader/ShaderReflector.hpp>
 
 namespace dnm {
 class StringInterner;
@@ -35,6 +34,10 @@ class ShaderManager {
   void update();
 
  private:
+  ShaderHandle registerShaderFile(InternedString filePath,
+                                  vk::ShaderStageFlagBits shaderStage,
+                                  std::optional<ShaderHandle> includer);
+
   StringInterner* m_interner;
   ShaderReflector m_reflector;
 
@@ -46,6 +49,8 @@ class ShaderManager {
     std::chrono::time_point<std::chrono::file_clock> modificationTimeStamp;
     bool dirty = false;
     bool isContentUpdated = false;
+    std::vector<ShaderHandle> includedBy;
+    std::vector<ShaderHandle> includes;
   };
 
   std::vector<Shader> m_shaders;

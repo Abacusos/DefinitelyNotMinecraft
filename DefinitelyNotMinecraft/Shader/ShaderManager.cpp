@@ -1,13 +1,9 @@
+#include <Core/StringInterner.hpp>
 #include <Shader/ShaderManager.hpp>
-
-#include <glslang/Public/ResourceLimits.h>
-#include <glslang/SPIRV/GlslangToSpv.h>
-
 #include <filesystem>
 #include <fstream>
 #include <iostream>
-
-#include <Core/StringInterner.hpp>
+#include <shaderc/shaderc.hpp>
 
 namespace dnm {
 
@@ -19,7 +15,7 @@ std::string readFile(std::string_view filename) {
     throw std::runtime_error("failed to open file!");
   }
 
-  size_t fileSize = (size_t)file.tellg();
+  const size_t fileSize = (size_t)file.tellg();
   std::string buffer;
   buffer.resize(fileSize);
 
@@ -31,103 +27,61 @@ std::string readFile(std::string_view filename) {
   return buffer;
 }
 
-EShLanguage translateShaderStage(vk::ShaderStageFlagBits stage) {
+shaderc_shader_kind translateShaderStage(vk::ShaderStageFlagBits stage) {
   switch (stage) {
     case vk::ShaderStageFlagBits::eVertex:
-      return EShLangVertex;
+      return shaderc_vertex_shader;
     case vk::ShaderStageFlagBits::eTessellationControl:
-      return EShLangTessControl;
+      return shaderc_tess_control_shader;
     case vk::ShaderStageFlagBits::eTessellationEvaluation:
-      return EShLangTessEvaluation;
+      return shaderc_tess_evaluation_shader;
     case vk::ShaderStageFlagBits::eGeometry:
-      return EShLangGeometry;
+      return shaderc_geometry_shader;
     case vk::ShaderStageFlagBits::eFragment:
-      return EShLangFragment;
+      return shaderc_fragment_shader;
     case vk::ShaderStageFlagBits::eCompute:
-      return EShLangCompute;
+      return shaderc_compute_shader;
     case vk::ShaderStageFlagBits::eRaygenNV:
-      return EShLangRayGenNV;
+      return shaderc_raygen_shader;
     case vk::ShaderStageFlagBits::eAnyHitNV:
-      return EShLangAnyHitNV;
+      return shaderc_anyhit_shader;
     case vk::ShaderStageFlagBits::eClosestHitNV:
-      return EShLangClosestHitNV;
+      return shaderc_closesthit_shader;
     case vk::ShaderStageFlagBits::eMissNV:
-      return EShLangMissNV;
+      return shaderc_miss_shader;
     case vk::ShaderStageFlagBits::eIntersectionNV:
-      return EShLangIntersectNV;
+      return shaderc_intersection_shader;
     case vk::ShaderStageFlagBits::eCallableNV:
-      return EShLangCallableNV;
+      return shaderc_callable_shader;
     case vk::ShaderStageFlagBits::eTaskNV:
-      return EShLangTaskNV;
+      return shaderc_task_shader;
     case vk::ShaderStageFlagBits::eMeshNV:
-      return EShLangMeshNV;
+      return shaderc_mesh_shader;
     default:
       assert(false && "Unknown shader stage");
-      return EShLangVertex;
+      return shaderc_glsl_infer_from_source;
   }
 }
-bool GLSLtoSPV(std::string_view glslShader, vk::ShaderStageFlagBits stageFlag,
-               std::vector<unsigned int>& spvShader) {
-  EShLanguage stage = translateShaderStage(stageFlag);
 
-  const char* shaderStrings[1];
-  shaderStrings[0] = glslShader.data();
+constexpr std::string_view includeSearchView = "#include \"";
+constexpr std::string_view includeSearchViewEnd = "\"\r\n";
 
-  glslang::TShader shader(stage);
-  shader.setEnvTarget(glslang::EShTargetLanguage::EShTargetSpv,
-                      glslang::EShTargetLanguageVersion::EShTargetSpv_1_3);
-  shader.setStrings(shaderStrings, 1);
-
-  // Enable SPIR-V and Vulkan rules when parsing GLSL
-  EShMessages messages = (EShMessages)(EShMsgSpvRules | EShMsgVulkanRules);
-
-  if (!shader.parse(GetDefaultResources(), 100, false, messages)) {
-    u32 index = 0u;
-    u32 lineBreak = 0u;
-    u32 lineCount = 1u;
-    while (index < glslShader.size()) {
-      lineBreak = glslShader.find_first_of("\n", index);
-      if (lineBreak == glslShader.npos) {
-        break;
-      }
-      std::cerr << lineCount++ << ": "
-                << glslShader.substr(index, lineBreak - index) << std::endl;
-      index = lineBreak + 1;
-    }
-
-    std::cerr << shader.getInfoLog() << std::endl;
-
-    if (auto* debugLog = shader.getInfoDebugLog(); debugLog) {
-      std::cerr << debugLog << std::endl;
-    }
-    return false;  // something didn't work
+void printShaderContent(std::string_view shader) {
+  size_t lineCount = 1u;
+  size_t start = 0ull;
+  size_t line = shader.find('\n');
+  while (line != std::string::npos) {
+    std::cout << lineCount++ << ": "
+              << std::string_view(shader.data() + start, shader.data() + line)
+              << "\n";
+    start = line + 1;
+    line = shader.find("\n", start);
   }
 
-  glslang::TProgram program;
-  program.addShader(&shader);
-
-  //
-  // Program-level processing...
-  //
-
-  if (!program.link(messages)) {
-    auto* log = shader.getInfoLog();
-    auto* debugLog = shader.getInfoDebugLog();
-    puts(log);
-    puts(debugLog);
-    fflush(stdout);
-    return false;
-  }
-
-  glslang::SpvOptions options;
-#if !defined(NDEBUG)
-  options.generateDebugInfo = true;
-#endif
-  glslang::GlslangToSpv(*program.getIntermediate(stage), spvShader, &options);
-  return true;
+  std::cout << lineCount++ << ": "
+            << std::string_view(shader.data() + start, shader.size() - start)
+            << "\n";
 }
-
-constexpr std::string_view versionPreamble = "#version 460\n";
 }  // namespace
 
 ShaderManager::ShaderManager(StringInterner* interner)
@@ -151,7 +105,7 @@ ShaderManager::ShaderManager(StringInterner* interner)
           shader.modificationTimeStamp = lastModification;
           m_dirty.store(true);
         }
-      };
+      }
     }
   });
 }
@@ -162,59 +116,128 @@ ShaderManager::~ShaderManager() {
 ShaderHandle ShaderManager::registerShaderFile(
     InternedString filePath, vk::ShaderStageFlagBits shaderStage) {
   std::lock_guard guard(m_mutex);
+  return registerShaderFile(filePath, shaderStage, {});
+}
 
-  u32 index = m_shaders.size();
+ShaderHandle ShaderManager::registerShaderFile(
+    InternedString filePath, vk::ShaderStageFlagBits shaderStage,
+    std::optional<ShaderHandle> includer) {
+  for (auto i = 0u, size = static_cast<u32>(m_shaders.size()); i < size; ++i) {
+    auto& shader = m_shaders[i];
+    if (shader.filePath == filePath) {
+      if (includer) {
+        shader.includedBy.emplace_back(includer.value());
+      }
+      return ShaderHandle{.index = i};
+    }
+  }
+
+  const u32 index = static_cast<u32>(m_shaders.size());
   auto& shader = m_shaders.emplace_back();
 
   shader.filePath = filePath;
-  auto filePathView = m_interner->getStringView(shader.filePath);
+  const auto filePathView = m_interner->getStringView(shader.filePath);
   shader.shaderContent = readFile(filePathView);
+
+  std::vector<InternedString> includes;
+
+  size_t includeStart = shader.shaderContent.find(includeSearchView);
+  while (includeStart != std::string::npos) {
+    const size_t includeEnd =
+        shader.shaderContent.find(includeSearchViewEnd, includeStart);
+    const char* startInclude =
+        shader.shaderContent.data() + includeStart + includeSearchView.size();
+    const std::string_view includeView{
+        startInclude, includeEnd - includeStart - includeSearchView.size()};
+    const InternedString internedInclude =
+        m_interner->addOrGetString(includeView);
+    includes.emplace_back(internedInclude);
+    includeStart = shader.shaderContent.find(includeSearchView, includeEnd);
+  }
+
   shader.shaderStage = shaderStage;
   shader.reflection = m_reflector.reflectShader(shader.shaderContent);
   shader.modificationTimeStamp = std::filesystem::last_write_time(filePathView);
+
+  for (const auto& include : includes) {
+    auto shaderHandle = registerShaderFile(
+        include, vk::ShaderStageFlagBits::eAll, ShaderHandle{.index = index});
+    m_shaders[index].includes.emplace_back(shaderHandle);
+  }
 
   return ShaderHandle{.index = index};
 }
 
 std::optional<vk::raii::ShaderModule> ShaderManager::getCompiledVersion(
     const vk::raii::Device& device, ShaderHandle handle,
-    std::span<Define> defines) const
-{
+    std::span<Define> defines) const {
   assert(handle.index < m_shaders.size());
 
-  std::string completeShader;
-  u32 size = versionPreamble.size();
+  auto completeShader = m_shaders[handle.index].shaderContent;
 
-  for (auto& define : defines) {
-    size += m_interner->getStringView(define.defineName).size();
-    size += define.defineValue.size();
+  for (auto includeHandle : m_shaders[handle.index].includes) {
+    std::string_view fileName =
+        m_interner->getStringView(m_shaders[includeHandle.index].filePath);
+    std::string include;
+    auto includeLength = includeSearchView.size() + fileName.size() +
+                         includeSearchViewEnd.size();
+    include.reserve(includeLength);
+    include = includeSearchView;
+    include.append(fileName);
+    include.append(includeSearchViewEnd);
+
+    const auto includeStart = completeShader.find(include);
+    completeShader.replace(includeStart, includeLength,
+                           m_shaders[includeHandle.index].shaderContent);
   }
 
-  size += m_shaders[handle.index].shaderContent.size();
+  const shaderc::Compiler compiler;
+  shaderc::CompileOptions options;
+  options.SetForcedVersionProfile(460, shaderc_profile_core);
+  options.SetTargetEnvironment(shaderc_target_env_vulkan,
+                               shaderc_env_version_vulkan_1_1);
+  options.SetOptimizationLevel(shaderc_optimization_level_zero);
+  options.SetTargetSpirv(shaderc_spirv_version_1_3);
 
-  completeShader.reserve(size);
-
-  completeShader.insert(0u, versionPreamble);
   for (auto& define : defines) {
-    completeShader.insert(
-        completeShader.size(),
-        std::format("#define {} {}\n",
-                    m_interner->getStringView(define.defineName),
-                    define.defineValue));
+    auto name = m_interner->getStringView(define.defineName);
+    options.AddMacroDefinition(name.data(), name.size(),
+                               define.defineValue.data(),
+                               define.defineValue.size());
   }
 
-  completeShader.insert(completeShader.size(),
-                        m_shaders[handle.index].shaderContent);
+  const auto shaderNameString =
+      m_interner->getStringView(m_shaders[handle.index].filePath);
 
-  std::vector<unsigned int> shaderSPV;
-  if (!GLSLtoSPV(completeShader, m_shaders[handle.index].shaderStage,
-                 shaderSPV)) {
+  const auto shaderKind =
+      translateShaderStage(m_shaders[handle.index].shaderStage);
+
+  const auto preprocessed =
+      compiler.PreprocessGlsl(completeShader.c_str(), completeShader.size(),
+                              shaderKind, shaderNameString.data(), options);
+
+  if (preprocessed.GetCompilationStatus() !=
+      shaderc_compilation_status_success) {
+    printShaderContent(completeShader);
+    std::cerr << preprocessed.GetErrorMessage();
     return {};
   }
 
+  const std::string sourcePreprocessed(preprocessed.cbegin(),
+                                       preprocessed.cend());
+  const auto compiling = compiler.CompileGlslToSpv(
+      sourcePreprocessed, shaderKind, shaderNameString.data(), options);
+
+  if (compiling.GetCompilationStatus() != shaderc_compilation_status_success) {
+    printShaderContent(sourcePreprocessed);
+    std::cerr << compiling.GetErrorMessage();
+    return {};
+  }
+
+  std::vector spirv(compiling.begin(), compiling.end());
+
   return vk::raii::ShaderModule(
-      device,
-      vk::ShaderModuleCreateInfo(vk::ShaderModuleCreateFlags(), shaderSPV));
+      device, vk::ShaderModuleCreateInfo(vk::ShaderModuleCreateFlags(), spirv));
 }
 bool ShaderManager::wasContentUpdated(ShaderHandle handle) {
   assert(handle.index < m_shaders.size());

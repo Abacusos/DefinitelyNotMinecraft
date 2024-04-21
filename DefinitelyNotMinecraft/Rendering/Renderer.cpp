@@ -9,15 +9,11 @@ VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
 #include <Core/ShortTypes.hpp>
 #include <Rendering/RAIIUtils.hpp>
 
-#include "glslang/SPIRV/GlslangToSpv.h"
-
 namespace dnm {
 
 Renderer::Renderer(Config* config) : m_config{config} {
-  glslang::InitializeProcess();
-
   m_instance = makeInstance(m_context, "Definitely not Minecraft", "EngineName",
-                            {}, getInstanceExtensions());
+                            {}, getInstanceExtensions(), VK_API_VERSION_1_1);
 #if !defined(NDEBUG)
   vk::raii::DebugUtilsMessengerEXT debugUtilsMessenger(
       m_instance, makeDebugUtilsMessengerCreateInfoEXT());
@@ -29,9 +25,8 @@ Renderer::Renderer(Config* config) : m_config{config} {
 
   auto feature = m_physicalDevice.getFeatures();
 
-  auto features2 =
-      m_physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2,
-                                    vk::PhysicalDevice8BitStorageFeaturesKHR>();
+  auto features2 = m_physicalDevice.getFeatures2<
+      vk::PhysicalDeviceFeatures2, vk::PhysicalDevice8BitStorageFeatures>();
 
   m_surfaceData = SurfaceData(m_instance, "Definitely not Minecraft",
                               vk::Extent2D(1920, 1017));
@@ -47,6 +42,22 @@ Renderer::Renderer(Config* config) : m_config{config} {
   m_commandPool = vk::raii::CommandPool(
       m_device, {vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
                  graphicsAndPresentQueueFamilyIndex.first});
+
+  std::array sizes{
+      vk::DescriptorPoolSize{vk::DescriptorType::eSampler, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eCombinedImageSampler, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eSampledImage, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageImage, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eUniformTexelBuffer, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageTexelBuffer, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBuffer, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBuffer, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eUniformBufferDynamic, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eStorageBufferDynamic, 1000u},
+      vk::DescriptorPoolSize{vk::DescriptorType::eInputAttachment, 1000u},
+  };
+
+  m_descriptorPool = makeDescriptorPool(m_device, sizes);
 
   m_graphicsQueue =
       vk::raii::Queue(m_device, graphicsAndPresentQueueFamilyIndex.first, 0);
@@ -74,10 +85,7 @@ Renderer::Renderer(Config* config) : m_config{config} {
       vk::raii::Semaphore(m_device, vk::SemaphoreCreateInfo());
 }
 
-Renderer::~Renderer() {
-  m_device.waitIdle();
-  glslang::FinalizeProcess();
-}
+Renderer::~Renderer() { m_device.waitIdle(); }
 
 u32 Renderer::prepareDrawFrame() {
   ZoneScoped;
@@ -169,6 +177,10 @@ const vk::raii::Queue& Renderer::getGraphicsQueue() const {
 
 const vk::raii::Framebuffer& Renderer::getFrameBuffer(u32 imageIndex) const {
   return m_framebuffers[imageIndex];
+}
+
+const vk::raii::DescriptorPool& Renderer::getDescriptorPool() const {
+  return m_descriptorPool;
 }
 
 vk::Format Renderer::getColorFormat() const { return m_colorFormat; }

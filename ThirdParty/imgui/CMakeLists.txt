@@ -24,7 +24,7 @@ target_include_directories(imgui PUBLIC
 ${imgui_SOURCE_DIR}
 ${imgui_SOURCE_DIR}/backends)
 
-find_package(Vulkan REQUIRED glslang glslc SPIRV-Tools)
+find_package(Vulkan REQUIRED)
 
 target_link_libraries(imgui PRIVATE glfw)
 target_link_libraries(imgui PRIVATE Vulkan::Vulkan)
