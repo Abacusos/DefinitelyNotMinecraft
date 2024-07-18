@@ -5,61 +5,64 @@
 #include <Core/Handle.hpp>
 #include <Rendering/Renderer.hpp>
 
-namespace dnm {
+namespace dnm
+{
+    class ShaderManager;
+    class StringInterner;
 
-class ShaderManager;
-class StringInterner;
+    class GizmoRenderingModule
+    {
+    public:
+        explicit GizmoRenderingModule(Config* config, Renderer* renderer,
+                                      ShaderManager* manager, BlockWorld* blockWorld,
+                                      StringInterner* interner);
 
-class GizmoRenderingModule {
- public:
-  explicit GizmoRenderingModule(Config* config, Renderer* renderer,
-                                ShaderManager* manager, BlockWorld* blockWorld,
-                                StringInterner* interner);
-  
-  struct VertexGizmo {
-    v3 x, y, z;  // Position data
-    v3 r, g, b;  // color
-  };
-  void drawLines(std::span<VertexGizmo> lineElements);
+        struct VertexGizmo
+        {
+            v3 x, y, z; // Position data
+            v3 r, g, b; // color
+        };
 
-  void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
-                 const vk::raii::Semaphore& previousRenderStepFinished);
+        void drawLines(std::span<VertexGizmo> lineElements);
 
-  vk::raii::Semaphore& getRenderingFinishedSemaphore();
+        void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
+                       const vk::raii::Semaphore& previousRenderStepFinished);
 
- private:
-  void recreatePipeline();
-  void recompileShadersIfNecessary(bool force = false);
+        vk::raii::Semaphore& getRenderingFinishedSemaphore();
 
- private:
-  Config* m_config;
-  Renderer* m_renderer;
-  ShaderManager* m_shaderManager;
-  BlockWorld* m_blockWorld;
-  StringInterner* m_interner;
+    private:
+        void recreatePipeline();
+        void recompileShadersIfNecessary(bool force = false);
 
-  ShaderHandle m_vertexHandle;
-  ShaderHandle m_fragmentHandle;
-  ShaderHandle m_computeHandle;
+    private:
+        Config* m_config;
+        Renderer* m_renderer;
+        ShaderManager* m_shaderManager;
+        BlockWorld* m_blockWorld;
+        StringInterner* m_interner;
 
-  vk::raii::ShaderModule m_vertexShaderModule{nullptr};
-  vk::raii::ShaderModule m_fragmentShaderModule{nullptr};
+        ShaderHandle m_vertexHandle;
+        ShaderHandle m_fragmentHandle;
+        ShaderHandle m_computeHandle;
 
-  dnm::BufferData m_vertexBuffer{nullptr};
+        vk::raii::ShaderModule m_vertexShaderModule{nullptr};
+        vk::raii::ShaderModule m_fragmentShaderModule{nullptr};
 
-  vk::raii::RenderPass m_renderPass{nullptr};
-  vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
-  vk::raii::PipelineLayout m_pipelineLayout{nullptr};
+        dnm::BufferData m_vertexBuffer{nullptr};
 
-  vk::raii::DescriptorSet m_descriptorSet{nullptr};
+        vk::raii::RenderPass m_renderPass{nullptr};
+        vk::raii::DescriptorSetLayout m_descriptorSetLayout{nullptr};
+        vk::raii::PipelineLayout m_pipelineLayout{nullptr};
 
-  vk::raii::Pipeline m_graphicsPipeline{nullptr};
+        vk::raii::DescriptorSet m_descriptorSet{nullptr};
 
-  vk::raii::CommandBuffer m_commandBuffer{nullptr};
-  vk::raii::Semaphore m_renderingFinished{nullptr};
+        vk::raii::Pipeline m_graphicsPipeline{nullptr};
 
-  constexpr static u32 reservedGizmoSpace = 4000;
-  std::array<VertexGizmo, reservedGizmoSpace> m_verticesGizmo;
-  u32 m_occupiedVertexPlaces = 0u;
-};
-}  // namespace dnm
+        vk::raii::CommandBuffer m_commandBuffer{nullptr};
+        vk::raii::Semaphore m_renderingFinished{nullptr};
+
+        constexpr static u32 reservedGizmoSpace = 4000;
+        std::array<VertexGizmo, reservedGizmoSpace> m_verticesGizmo;
+        u32 m_occupiedVertexPlaces = 0u;
+    };
+} // namespace dnm
