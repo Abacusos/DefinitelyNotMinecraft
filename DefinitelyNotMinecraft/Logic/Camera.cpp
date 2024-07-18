@@ -33,8 +33,8 @@ void Camera::processKeyboard(CameraMovement direction, TimeSpan deltaTime) {
 }
 
 void Camera::processMouseMovement(float xoffset, float yoffset) {
-  m_accumulatedXChange += xoffset;
-  m_accumulatedYChange += yoffset;
+  m_accumulatedXChange += xoffset / 1920;
+  m_accumulatedYChange += yoffset / 1078;
   m_dirty = true;
 }
 
@@ -44,14 +44,12 @@ bool Camera::update(TimeSpan deltaTime) {
     return false;
   }
 
-  float rotSpeed = deltaTime.count() * m_rotationSpeed;
-
-  m_rotation.y += -m_accumulatedXChange * rotSpeed;
-  m_rotation.x += m_accumulatedYChange * rotSpeed;
+  m_rotation.y += -m_accumulatedXChange * m_rotationSpeed;
+  m_rotation.x += m_accumulatedYChange * m_rotationSpeed;
   if (m_rotation.x > 89.0f) {
     m_rotation.x = 89.0f;
   }
-  if (m_rotation.x < -89.0f) {
+  if (m_rotation.x < -89.0f) { 
     m_rotation.x = -89.0f;
   }
 

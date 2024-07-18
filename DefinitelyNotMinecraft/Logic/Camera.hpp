@@ -35,7 +35,7 @@ class Camera {
   m4 m_cameraTransform;
   m4 m_viewMatrix;
 
-  float m_rotationSpeed = 0.001f;
+  float m_rotationSpeed = 30.0f;
   float m_movementSpeed = 0.01f;
 
   bool m_dirty = true;
