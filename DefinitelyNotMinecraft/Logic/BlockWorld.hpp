@@ -8,13 +8,14 @@
 
 #define GLM_ENABLE_EXPERIMENTAL
 #include <Core/GLMInclude.hpp>
-#include "PerlinNoise.hpp"
 #include <Core/ShortTypes.hpp>
+
+#include "PerlinNoise.hpp"
 #include "glm/gtx/hash.hpp"
 
 namespace dnm {
 struct Config;
-using BlockType = u8;
+using BlockType = u16;
 class Camera;
 
 class BlockWorld {
@@ -25,12 +26,11 @@ class BlockWorld {
     Created,
     InProgress,
     FinishedGeneration,
-    DirtyRendering
+    RequiresVisibilityUpdate,
   };
 
   ChunkState requestChunk(glm::ivec2 chunkPosition);
   bool isRenderingDirty(glm::ivec2 chunkPosition) const;
-  void clearRenderingDirty(glm::ivec2 chunkPosition);
   std::span<const BlockType> getChunkData(glm::ivec2 chunkPosition) const;
 
   enum class BlockAction { Add, Destroy };
@@ -49,7 +49,7 @@ class BlockWorld {
   constexpr static u64 chunkHeight = 128u;
   constexpr static u64 perChunkBlockCount =
       (chunkLocalSize * chunkLocalSize * chunkHeight);
-  constexpr static BlockType air = BlockType(255);
+  constexpr static BlockType air = BlockType(65535u);
 
  private:
   Config* m_config;
@@ -75,6 +75,7 @@ class BlockWorld {
                                       i32 y, i32 z);
   void updateVisibilityBit(const BlockPosition& position,
                            std::span<BlockType> positionChunkData);
+  void triggerVisibilityUpdateOnNeighbors(const BlockPosition& position);
 
   // This should be presumably threadsafe as long as the noise is not reseeded
   siv::BasicPerlinNoise<float> m_noiseGrass{42};

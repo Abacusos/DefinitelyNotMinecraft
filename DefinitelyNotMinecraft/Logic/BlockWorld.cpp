@@ -6,8 +6,6 @@
 namespace dnm {
 
 namespace {
-constexpr u8 highestBit = u8(1) << 7;
-
 constexpr bool testWorldSetup = false;
 }  // namespace
 
@@ -21,12 +19,67 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
     case ChunkState::FinishedGeneration: {
       break;
     }
+    case ChunkState::RequiresVisibilityUpdate: {
+      BlockPosition position{};
+      position.chunkIndex = chunkPosition;
+      {
+        auto localChunkZ = 0u;
+        for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
+          for (auto localChunkX = 0; localChunkX < chunkLocalSize;
+               ++localChunkX) {
+            position.positionWithinChunk = {localChunkX, localChunkY,
+                                            localChunkZ};
+            std::span data = chunk.data;
+            updateVisibilityBit(position, data);
+          }
+        }
+      }
+      {
+        auto localChunkZ = chunkLocalSize - 1;
+        for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
+          for (auto localChunkX = 0; localChunkX < chunkLocalSize;
+               ++localChunkX) {
+            position.positionWithinChunk = {localChunkX, localChunkY,
+                                            localChunkZ};
+            std::span data = chunk.data;
+            updateVisibilityBit(position, data);
+          }
+        }
+      }
+      {
+        auto localChunkX = 0u;
+        for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
+          for (auto localChunkZ = 0; localChunkZ < chunkLocalSize;
+               ++localChunkZ) {
+            position.positionWithinChunk = {localChunkX, localChunkY,
+                                            localChunkZ};
+            std::span data = chunk.data;
+            updateVisibilityBit(position, data);
+          }
+        }
+      }
+      {
+        auto localChunkX = chunkLocalSize - 1;
+        for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
+          for (auto localChunkZ = 0; localChunkZ < chunkLocalSize;
+               ++localChunkZ) {
+            position.positionWithinChunk = {localChunkX, localChunkY,
+                                            localChunkZ};
+            std::span data = chunk.data;
+            updateVisibilityBit(position, data);
+          }
+        }
+      }
+      chunk.state = ChunkState::FinishedGeneration;
+      break;
+    }
     case ChunkState::InProgress: {
       if (const auto status = chunk.loadTask.wait_for(std::chrono::seconds(0));
           status == std::future_status::ready) {
         // Although this is kind of pointless
         chunk.loadTask.get();
-        chunk.state = ChunkState::FinishedGeneration;
+        chunk.state = ChunkState::RequiresVisibilityUpdate;
+        triggerVisibilityUpdateOnNeighbors(BlockPosition{chunkPosition});
       }
       break;
     }
@@ -52,15 +105,24 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
                 return result;
               }
 
+              float scalingHeight = 1.0f;
+              if (y > chunkHeight / 2) {
+                scalingHeight = 1.0f - y / float(chunkHeight);
+              }
+
               x /= 100.0f;
               y /= 100.0f;
               z /= 100.0f;
-              const float grass = m_noiseGrass.octave3D_01(x, y, z, 6);
-              const float cobbleStone = m_noiseCobble.octave3D_01(x, y, z, 6);
-              const float stone = m_noiseStone.octave3D_01(x, y, z, 6);
-              const float sand = m_noiseSand.octave3D_01(x, y, z, 6);
+              const float grass =
+                  m_noiseGrass.octave3D_01(x, y, z, 6) * scalingHeight;
+              const float cobbleStone =
+                  m_noiseCobble.octave3D_01(x, y, z, 6) * scalingHeight;
+              const float stone =
+                  m_noiseStone.octave3D_01(x, y, z, 6) * scalingHeight;
+              const float sand =
+                  m_noiseSand.octave3D_01(x, y, z, 6) * scalingHeight;
 
-              float currentHighestNoise = 0.6f;
+              float currentHighestNoise = 0.2f;
 
               if (grass > currentHighestNoise) {
                 currentHighestNoise = grass;
@@ -115,12 +177,11 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
 
             BlockPosition position{};
             position.chunkIndex = chunkPosition;
-
             for (i64 localChunkY = 0; localChunkY < chunkHeight;
                  ++localChunkY) {
-              for (auto localChunkZ = 0; localChunkZ < chunkLocalSize;
+              for (auto localChunkZ = 1; localChunkZ < chunkLocalSize - 1;
                    ++localChunkZ) {
-                for (auto localChunkX = 0; localChunkX < chunkLocalSize;
+                for (auto localChunkX = 1; localChunkX < chunkLocalSize - 1;
                      ++localChunkX) {
                   position.positionWithinChunk = {localChunkX, localChunkY,
                                                   localChunkZ};
@@ -147,19 +208,7 @@ bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
     return false;
   }
 
-  return it->second.state == ChunkState::DirtyRendering;
-}
-
-void BlockWorld::clearRenderingDirty(glm::ivec2 chunkPosition) {
-  std::lock_guard g{m_chunkDataMutex};
-  const auto it = m_chunkData.find(chunkPosition);
-  if (it == m_chunkData.end()) {
-    assert(false);
-    return;
-  }
-
-  assert(it->second.state == ChunkState::DirtyRendering);
-  it->second.state = ChunkState::FinishedGeneration;
+  return it->second.state == ChunkState::RequiresVisibilityUpdate;
 }
 
 std::span<const BlockType> BlockWorld::getChunkData(
@@ -240,9 +289,7 @@ std::optional<BlockWorld::BlockPosition> BlockWorld::getFirstTracedBlock(
 void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
                              BlockType type) {
   ZoneScoped;
-  // In theory, we need to lock here. But the write access only happens on the
-  // main thread as well as this access here, so we can skip it for now.
-
+  std::lock_guard g{m_chunkDataMutex};
   const auto it = m_chunkData.find(position.chunkIndex);
   assert(it != m_chunkData.end());
 
@@ -252,21 +299,8 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition& position,
                              position.positionWithinChunk.x;
 
   it->second.data[heightOffset + inLayerOffset] = type;
-  it->second.state = ChunkState::DirtyRendering;
-
-  for (auto y = -1; y < 2; ++y) {
-    for (auto z = -1; z < 2; ++z) {
-      for (auto x = -1; x < 2; ++x) {
-        if (y == 0 && z == 0 && x == 0) {
-          continue;
-        }
-
-        BlockPosition positionWithOffset =
-            getPositionWithOffset(position, x, y, z);
-        updateVisibilityBit(positionWithOffset, it->second.data);
-      }
-    }
-  }
+  it->second.state = ChunkState::RequiresVisibilityUpdate;
+  triggerVisibilityUpdateOnNeighbors(position);
 }
 
 std::optional<BlockWorld::BlockPosition> BlockWorld::getBlockPosition(
@@ -350,71 +384,70 @@ void BlockWorld::updateVisibilityBit(const BlockPosition& position,
     return;
   }
 
-  bool allNeighborBlocksExist = true;
-  for (auto y = -1; y < 2; ++y) {
-    for (auto z = -1; z < 2; ++z) {
-      for (auto x = -1; x < 2; ++x) {
-        if (position.positionWithinChunk.y + y >= chunkHeight ||
-            position.positionWithinChunk.y + y < 0) {
-          allNeighborBlocksExist = false;
-          break;
-        }
+  constexpr u16 bitCount = sizeof(BlockType) * 8;
+  constexpr u16 directionCount = 6u;
+  constexpr glm::ivec3 directions[directionCount] = {
+      glm::ivec3{-1, 0, 0}, glm::ivec3{0, 0, 1}, glm::ivec3{0, 1, 0},
+      glm::ivec3{0, -1, 0}, glm::ivec3{1, 0, 0}, glm::ivec3{0, 0, -1}};
 
-        BlockPosition positionWithOffset =
-            getPositionWithOffset(position, x, y, z);
-
-        // The block itself should not influence the visibility bit.
-        // This happens once due to the loop and potentially if you
-        // check the highest block layer in a chunk.
-        if (positionWithOffset.positionWithinChunk ==
-            position.positionWithinChunk) {
-          continue;
-        }
-
-        std::span<BlockType> data;
-
-        if (positionWithOffset.chunkIndex != position.chunkIndex) {
-          std::lock_guard g{m_chunkDataMutex};
-          auto itChunk = m_chunkData.find(position.chunkIndex);
-          // This can e.g. happen if the chunk is not done yet
-          if (itChunk != m_chunkData.end() ||
-              itChunk->second.state != ChunkState::FinishedGeneration) {
-            allNeighborBlocksExist = false;
-            break;
-          }
-          data = itChunk->second.data;
-          itChunk->second.state = ChunkState::DirtyRendering;
-        } else {
-          data = positionChunkData;
-        }
-
-        const auto heightOffsetBlock =
-            chunkLocalSize * chunkLocalSize *
-            (positionWithOffset.positionWithinChunk.y);
-        const auto inLayerOffsetBlock =
-            (positionWithOffset.positionWithinChunk.z) * chunkLocalSize +
-            (positionWithOffset.positionWithinChunk.x);
-        if (data[heightOffsetBlock + inLayerOffsetBlock] == BlockWorld::air) {
-          allNeighborBlocksExist = false;
-          break;
-        }
-      }
-      if (!allNeighborBlocksExist) {
-        break;
-      }
-    }
-    if (!allNeighborBlocksExist) {
-      break;
-    }
-  }
-
-  if (allNeighborBlocksExist) {
+  for (auto i = 0u; i < directionCount; ++i) {
+    const auto bit = static_cast<BlockType>(1u)
+                     << (bitCount - directionCount + i);
     positionChunkData[heightOffsetBlockCenter + inLayerOffsetBlockCenter] |=
-        highestBit;
-  } else {
+        bit;
+    const auto& direction = directions[i];
+    if (position.positionWithinChunk.y + direction.y >= chunkHeight ||
+        position.positionWithinChunk.y + direction.y < 0) {
+      continue;
+    }
+
+    BlockPosition positionWithOffset =
+        getPositionWithOffset(position, direction.x, direction.y, direction.z);
+    // It should be fine to keep a span here because the modfications happen in
+    // a multithreaded manner and only on the main thread.
+    std::span<const BlockType> data;
+
+    if (positionWithOffset.chunkIndex != position.chunkIndex) {
+      auto itChunk = m_chunkData.find(positionWithOffset.chunkIndex);
+      // This can e.g. happen if the chunk is not done yet
+      if (itChunk == m_chunkData.end() ||
+          itChunk->second.state == ChunkState::Created ||
+          itChunk->second.state == ChunkState::InProgress) {
+        continue;
+      }
+      data = itChunk->second.data;
+    } else {
+      data = positionChunkData;
+    }
+
+    const auto heightOffsetBlock = chunkLocalSize * chunkLocalSize *
+                                   (positionWithOffset.positionWithinChunk.y);
+    const auto inLayerOffsetBlock =
+        (positionWithOffset.positionWithinChunk.z) * chunkLocalSize +
+        (positionWithOffset.positionWithinChunk.x);
+    if (data[heightOffsetBlock + inLayerOffsetBlock] == BlockWorld::air) {
+      continue;
+    }
+
     positionChunkData[heightOffsetBlockCenter + inLayerOffsetBlockCenter] &=
-        ~highestBit;
+        ~bit;
   }
 }
 
+void BlockWorld::triggerVisibilityUpdateOnNeighbors(
+    const BlockPosition& position) {
+  constexpr u16 directionCount = 4;
+  constexpr glm::ivec2 directions[directionCount] = {
+      glm::ivec2{-1, 0}, glm::ivec2{1, 0}, glm::ivec2{0, -1}, glm::ivec2{0, 1}};
+  for (auto& direction : directions) {
+    auto neigbhorIndex = position.chunkIndex + direction;
+    auto chunkIt = m_chunkData.find(neigbhorIndex);
+    if (chunkIt == m_chunkData.end()) {
+      continue;
+    }
+    if (chunkIt->second.state == ChunkState::FinishedGeneration) {
+      chunkIt->second.state = ChunkState::RequiresVisibilityUpdate;
+    }
+  }
+}
 }  // namespace dnm

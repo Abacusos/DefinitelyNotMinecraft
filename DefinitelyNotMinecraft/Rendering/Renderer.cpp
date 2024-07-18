@@ -13,7 +13,7 @@ namespace dnm {
 
 Renderer::Renderer(Config* config) : m_config{config} {
   m_instance = makeInstance(m_context, "Definitely not Minecraft", "EngineName",
-                            {}, getInstanceExtensions(), VK_API_VERSION_1_1);
+                            {}, getInstanceExtensions(), VK_API_VERSION_1_2);
 #if !defined(NDEBUG)
   vk::raii::DebugUtilsMessengerEXT debugUtilsMessenger(
       m_instance, makeDebugUtilsMessengerCreateInfoEXT());
@@ -23,10 +23,10 @@ Renderer::Renderer(Config* config) : m_config{config} {
   std::vector<vk::ExtensionProperties> extensionProperties =
       m_physicalDevice.enumerateDeviceExtensionProperties();
 
-  auto feature = m_physicalDevice.getFeatures();
-
-  auto features2 = m_physicalDevice.getFeatures2<
-      vk::PhysicalDeviceFeatures2, vk::PhysicalDevice8BitStorageFeatures>();
+  auto supportedFeatures =
+      m_physicalDevice.getFeatures2<vk::PhysicalDeviceFeatures2,
+                                    vk::PhysicalDeviceVulkan11Features,
+                                    vk::PhysicalDeviceVulkan12Features>();
 
   m_surfaceData = SurfaceData(m_instance, "Definitely not Minecraft",
                               vk::Extent2D(1920, 1017));
@@ -36,11 +36,13 @@ Renderer::Renderer(Config* config) : m_config{config} {
                                              m_surfaceData.surface);
   m_device =
       makeDevice(m_physicalDevice, graphicsAndPresentQueueFamilyIndex.first,
-                 getDeviceExtensions(), &feature, &features2);
+                 getDeviceExtensions(),
+                 &supportedFeatures.get<vk::PhysicalDeviceFeatures2>().features,
+                 &supportedFeatures.get<vk::PhysicalDeviceVulkan11Features>());
   registerDebugMarker(m_device, "DNM Device");
 
   m_commandPool = vk::raii::CommandPool(
-      m_device, {vk::CommandPoolCreateFlagBits::eResetCommandBuffer,
+      m_device, {vk::CommandPoolCreateFlagBits::eResetCommandBuffer,    
                  graphicsAndPresentQueueFamilyIndex.first});
 
   std::array sizes{

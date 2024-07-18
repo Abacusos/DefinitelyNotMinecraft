@@ -28,7 +28,7 @@ layout (std430, binding = 3) buffer blockTypeBuffer
 
 layout (std430, binding = 4) readonly buffer worldDataBuffer
 {
-    uint8_t blockTypeWorld[];
+    uint16_t blockTypeWorld[];
 };
 
 layout (binding = 5) buffer drawCallBuffer

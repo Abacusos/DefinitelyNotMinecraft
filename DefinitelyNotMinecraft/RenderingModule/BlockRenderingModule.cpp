@@ -264,7 +264,7 @@ void BlockRenderingModule::recreateBlockDependentBuffers() {
       GlobalBuffers::Transform, m_transformBuffer);
 
   m_worldDataBuffer = m_renderer->createBuffer(
-      blockCountAllLoadedChunks * sizeof(u8),
+      blockCountAllLoadedChunks * sizeof(BlockType),
       vk::BufferUsageFlagBits::eStorageBuffer, "World Data Blocks",
       vk::MemoryPropertyFlagBits::eDeviceLocal |
           vk::MemoryPropertyFlagBits::eHostVisible);
@@ -316,14 +316,13 @@ bool BlockRenderingModule::updateBlockWorldData(v3 cameraPosition) {
       const glm::ivec2 chunk{x, z};
       if (m_blockWorld->isRenderingDirty(chunk)) {
         chunkDirty = true;
-        m_blockWorld->clearRenderingDirty(chunk);
       }
     }
   }
 
   const bool requiresChunkDataUpdate = cameraChunk != m_cameraChunkLastFrame ||
                                        !m_allChunksUploadedLastFrame ||
-                                       chunkDirty;
+                                       chunkDirty || m_config->everyFrameGenerateDrawCalls;
 
   if (requiresChunkDataUpdate) {
     m_allChunksUploadedLastFrame = true;

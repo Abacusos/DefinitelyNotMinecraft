@@ -1,3 +1,5 @@
+const uint air = uint(65535);
+
 vec3 indexToPos()
 {
   int remap = int(remapIndex[gl_WorkGroupID.x]);
@@ -67,14 +69,11 @@ uint[6] getVisibleFaces(in ivec3 center, out uint faceCount)
     faceCount = 0;
 
     uint[6] result;
+    uint blockType = uint(blockTypeWorld[toFlatIndex(center)]);
 
     for(int i = 0; i < 6; ++i)
     {
-        ivec3 neighbor = ivec3(center.x % chunkLocalSize, center.y, center.z % chunkLocalSize);
-        neighbor += direction[i];
-        bool neighborIsInsideChunk = isInsideChunk(neighbor);
-        bool neighborIsAir = neighborIsInsideChunk ? uint(blockTypeWorld[toFlatIndex(neighbor)]) == uint(255) : false;
-        if(!neighborIsInsideChunk || (neighborIsInsideChunk && neighborIsAir))
+        if((blockType & uint(1) << (16 - 6 + i)) != 0u)
         {
             result[faceCount] = i;
             ++faceCount;
