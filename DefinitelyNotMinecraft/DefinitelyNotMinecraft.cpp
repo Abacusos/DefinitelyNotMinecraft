@@ -1,76 +1,72 @@
 ﻿#include "DefinitelyNotMinecraft.hpp"
 
-#include <RenderingModule/BlockRenderingModule.hpp>
-#include <Logic/Camera.hpp>
 #include <Core/Chrono.hpp>
 #include <Core/Config.hpp>
-#include <RenderingModule/GizmoRenderingModule.hpp>
-#include <Logic/Imgui.hpp>
-#include <RenderingModule/ImguiRenderingModule.hpp>
-#include <RenderingModule/ForwardRenderingModule.hpp>
-#include <Logic/Input.hpp>
 #include <Core/Profiler.hpp>
-#include <Rendering/Renderer.hpp>
-#include <Shader/ShaderManager.hpp>
 #include <Core/StringInterner.hpp>
+#include <Logic/Camera.hpp>
+#include <Logic/Imgui.hpp>
+#include <Logic/Input.hpp>
+#include <Rendering/RenderGraph.hpp>
+#include <Rendering/Renderer.hpp>
+#include <RenderingNodes/BlockRenderingNode.hpp>
+#include <RenderingNodes/ForwardRenderingNode.hpp>
+#include <RenderingNodes/GizmoRenderingNode.hpp>
+#include <RenderingNodes/ImguiRenderingNode.hpp>
+#include <Shader/ShaderManager.hpp>
 
-int main(int /*argc*/, char** /*argv*/) {
+int main(int /*argc*/, char ** /*argv*/) {
   using namespace dnm;
   try {
     Config config;
     StringInterner interner;
     ShaderManager shaderManager{&interner};
     Renderer renderer{&config};
-    auto* window = renderer.getGLFWwindow();
+    auto *window = renderer.getGLFWwindow();
     Camera camera(&config, &renderer);
     BlockWorld world{&config};
     Imgui imgui(&config, window);
+    RenderGraph graph{&renderer, &camera};
+    GizmoData gizmoData;
+    Input input(&camera, window, &world, &config, &gizmoData);
 
-    BlockRenderingModule blockRenderingModule{
-        &config, &renderer, &shaderManager, &world, &interner};
-    ForwardRenderingModule forwardRenderingModule{
-        &config, &renderer, &shaderManager, &world, &interner};
-    ImguiRenderingModule imguiModule{&config, &renderer};
-    GizmoRenderingModule gizmoRenderingModule{
-        &config, &renderer, &shaderManager, &world, &interner};
-
-    Input input(&camera, window, &world, &config, &gizmoRenderingModule);
+    graph.registerNode(std::make_unique<BlockDrawCallNode>(
+        &config, &renderer, &shaderManager, &world, &interner));
+    graph.registerNode(std::make_unique<ForwardRenderingNode>(
+        &config, &renderer, &shaderManager, &world, &interner));
+    graph.registerNode(
+        std::make_unique<ImguiRenderingNode>(&config, &renderer));
+    graph.registerNode(std::make_unique<GizmoRenderingNode>(
+        &config, &renderer, &shaderManager, &world, &interner, &gizmoData));
 
     auto lastFrame = std::chrono::system_clock::now();
 
     while (!glfwWindowShouldClose(window)) {
       FrameMark;
+      ZoneScopedN("Main");
       auto now = std::chrono::system_clock::now();
       auto deltaTime = std::chrono::duration_cast<TimeSpan>(now - lastFrame);
       lastFrame = now;
 
       input.processInput(window, deltaTime);
-      bool cameraMoved = camera.update(deltaTime);
-      glfwPollEvents();
+      camera.update(deltaTime);
+      {
+        ZoneScopedN("GLFW Event Polling");
+        glfwPollEvents();
+      }
 
       imgui.logicFrame(deltaTime, &camera);
 
       shaderManager.update();
 
-      auto imageIndex = renderer.prepareDrawFrame();
+      auto preparedFrame = graph.prepareFrame();
 
-      if (imageIndex == std::numeric_limits<u32>::max()) {
+      if (!preparedFrame) {
         continue;
       }
 
-      blockRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
-                                     deltaTime, cameraMoved, &camera);
-      forwardRenderingModule.drawFrame(renderer.getFrameBuffer(imageIndex),
-                                       blockRenderingModule.getRenderingFinishedSemaphore());
-      imguiModule.drawFrame(
-          renderer.getFrameBuffer(imageIndex), deltaTime,
-          forwardRenderingModule.getRenderingFinishedSemaphore());
-      gizmoRenderingModule.drawFrame(
-          renderer.getFrameBuffer(imageIndex), deltaTime,
-          imguiModule.getRenderingFinishedSemaphore());
-
-      renderer.finishDrawFrame(
-          gizmoRenderingModule.getRenderingFinishedSemaphore(), imageIndex);
+      graph.build();
+      graph.execute();
 
       if (config.limitFrames) {
         using namespace std::chrono_literals;
@@ -83,10 +79,10 @@ int main(int /*argc*/, char** /*argv*/) {
     }
 
     renderer.waitIdle();
-  } catch (vk::SystemError& err) {
+  } catch (vk::SystemError &err) {
     std::cout << "vk::SystemError: " << err.what() << std::endl;
     exit(-1);
-  } catch (std::exception& err) {
+  } catch (std::exception &err) {
     std::cout << "std::exception: " << err.what() << std::endl;
     exit(-1);
   } catch (...) {

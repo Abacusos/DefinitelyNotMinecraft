@@ -6,16 +6,16 @@ struct GLFWwindow;
 
 namespace dnm
 {
+    struct GizmoData;
     class Camera;
     class BlockWorld;
     struct Config;
-    class GizmoRenderingModule;
 
     class Input
     {
     public:
         explicit Input(Camera* camera, GLFWwindow* window, BlockWorld* world,
-                       Config* config, GizmoRenderingModule* gizmoRendering);
+                       Config* config, GizmoData* gizmoData);
         void processInput(GLFWwindow* window, TimeSpan dt);
 
     private:
@@ -23,7 +23,7 @@ namespace dnm
         Camera* m_camera;
         BlockWorld* m_world;
         Config* m_config;
-        GizmoRenderingModule* m_gizmoRendering;
+        GizmoData* m_gizmoData;
 
         float m_lastX = 0.0f;
         float m_lastY = 0.0f;

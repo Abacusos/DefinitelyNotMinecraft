@@ -1,48 +1,44 @@
 #pragma once
 
-#include <vulkan/vulkan.hpp>
-#include <tracy/TracyVulkan.hpp>
-
 #include <Rendering/Renderer.hpp>
+#include <tracy/TracyVulkan.hpp>
+#include <vulkan/vulkan.hpp>
 
-namespace dnm
-{
-    class GPUProfilerContext
-    {
-    public:
-        GPUProfilerContext() = default;
+namespace dnm {
+class GPUProfilerContext {
+ public:
+  GPUProfilerContext() = default;
 
-        explicit GPUProfilerContext(const Renderer* renderer, const VkQueue& queue,
-                                    const vk::raii::CommandBuffer& commandBuffer)
-        {
-            context =
-                TracyVkContext(*renderer->getPhysicalDevice(), *renderer->getDevice(), queue, *commandBuffer);
-        }
+  explicit GPUProfilerContext(const Renderer* renderer) {
+    context = TracyVkContextHostCalibrated(
+        *renderer->getPhysicalDevice(), *renderer->getDevice(),
+        renderer->getDevice().getDispatcher()->vkResetQueryPool,
+        renderer->getInstance()
+            .getDispatcher()
+            ->vkGetPhysicalDeviceCalibrateableTimeDomainsEXT,
+        renderer->getDevice().getDispatcher()->vkGetCalibratedTimestampsEXT);
+  }
 
-        ~GPUProfilerContext()
-        {
-            if (context)
-            {
-                TracyVkDestroy(context);
-            }
-        }
+  ~GPUProfilerContext() {
+    if (context) {
+      TracyVkDestroy(context);
+    }
+  }
 
-        GPUProfilerContext(const GPUProfilerContext&) = delete;
-        GPUProfilerContext& operator=(const GPUProfilerContext&) = delete;
+  GPUProfilerContext(const GPUProfilerContext&) = delete;
+  GPUProfilerContext& operator=(const GPUProfilerContext&) = delete;
 
-        GPUProfilerContext(GPUProfilerContext&& other) noexcept
-            : context{other.context}
-        {
-            other.context = nullptr;
-        }
+  GPUProfilerContext(GPUProfilerContext&& other) noexcept
+      : context{other.context} {
+    other.context = nullptr;
+  }
 
-        GPUProfilerContext& operator=(GPUProfilerContext&& other) noexcept
-        {
-            context = other.context;
-            other.context = nullptr;
-            return *this;
-        }
+  GPUProfilerContext& operator=(GPUProfilerContext&& other) noexcept {
+    context = other.context;
+    other.context = nullptr;
+    return *this;
+  }
 
-        tracy::VkCtx* context;
-    };
-} // namespace dnm
+  tracy::VkCtx* context;
+};
+}  // namespace dnm

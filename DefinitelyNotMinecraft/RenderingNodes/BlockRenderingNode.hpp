@@ -5,6 +5,7 @@
 #include <Core/GPUProfiller.hpp>
 #include <Core/Handle.hpp>
 #include <Rendering/Renderer.hpp>
+#include <RenderingNodes/IRenderingNode.hpp>
 
 namespace dnm
 {
@@ -12,17 +13,18 @@ namespace dnm
     class ShaderManager;
     class StringInterner;
 
-    class BlockRenderingModule
+    class BlockDrawCallNode : public IRenderingNode
     {
     public:
-        explicit BlockRenderingModule(Config* config, Renderer* renderer,
+        explicit BlockDrawCallNode(Config* config, Renderer* renderer,
                                       ShaderManager* manager, BlockWorld* blockWorld,
                                       StringInterner* interner);
-
-        void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
-                       bool cameraMoved, Camera* camera);
-
-        vk::raii::Semaphore& getRenderingFinishedSemaphore();
+                
+        std::string_view getName() const override;
+        bool shouldExecute() const override;
+        ExecutionResult execute(
+            const ExecutionData& executionData,
+            vk::raii::CommandBuffer& commandBuffer) override;
 
     private:
         void recreatePipeline();
@@ -32,7 +34,6 @@ namespace dnm
         bool updateBlockWorldData(v3 cameraPosition);
         void updateCullingData(const Camera* camera) const;
 
-    private:
         Config* m_config;
         Renderer* m_renderer;
         ShaderManager* m_shaderManager;
@@ -61,9 +62,6 @@ namespace dnm
         vk::raii::DescriptorSet m_descriptorSet{nullptr};
 
         vk::raii::Pipeline m_computePipeline{nullptr};
-
-        vk::raii::CommandBuffer m_commandBufferCompute{nullptr};
-        vk::raii::Semaphore m_drawCallGenerationFinished{nullptr};
 
         GPUProfilerContext m_computeProfilerContext;
 

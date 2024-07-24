@@ -92,7 +92,7 @@ IncludeCategories:
     Priority: 3
   - Regex: "[<]Rendering[a-zA-Z\\/]+.hpp[>]"
     Priority: 4
-  - Regex: "[<]RenderingModule[a-zA-Z\\/]+.hpp[>]"
+  - Regex: "[<]RenderingNodes[a-zA-Z\\/]+.hpp[>]"
     Priority: 5
   - Priority: 6
     Regex: "[<]Shader[a-zA-Z\\/]+.hpp[>]"

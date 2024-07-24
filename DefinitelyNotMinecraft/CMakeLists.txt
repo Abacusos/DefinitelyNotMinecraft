@@ -1,5 +1,5 @@
 ﻿# Add source to this project's executable.
-add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp" "Core/Math.cpp" "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingModule/BlockRenderingModule.cpp" "RenderingModule/ForwardRenderingModule.cpp"   "Logic/BlockWorld.cpp" "RenderingModule/ImguiRenderingModule.cpp" "RenderingModule/GizmoRenderingModule.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp")
+add_executable (DefinitelyNotMinecraft "DefinitelyNotMinecraft.cpp" "DefinitelyNotMinecraft.hpp" "Core/Math.cpp" "Rendering/RAIIUtils.cpp" "Rendering/Renderer.cpp" "Logic/Input.cpp" "Logic/Camera.cpp" "RenderingNodes/BlockRenderingNode.cpp" "RenderingNodes/ForwardRenderingNode.cpp"   "Logic/BlockWorld.cpp" "RenderingNodes/ImguiRenderingNode.cpp" "RenderingNodes/GizmoRenderingNode.cpp" "Logic/Imgui.cpp"  "Shader/ShaderReflector.cpp" "Shader/ShaderManager.cpp" "Rendering/RenderGraph.cpp")
 
 target_include_directories(DefinitelyNotMinecraft PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 

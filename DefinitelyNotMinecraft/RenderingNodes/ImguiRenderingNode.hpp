@@ -2,20 +2,26 @@
 
 #include <Rendering/Renderer.hpp>
 #include <Core/Config.hpp>
+#include <RenderingNodes/IRenderingNode.hpp>
 
 namespace dnm
 {
-    class ImguiRenderingModule
+    class ImguiRenderingNode : public IRenderingNode
     {
     public:
-        explicit ImguiRenderingModule(Config* config, Renderer* renderer);
-        ~ImguiRenderingModule();
+        explicit ImguiRenderingNode(Config* config, Renderer* renderer);
+        ~ImguiRenderingNode();
 
         void drawFrame(const vk::raii::Framebuffer& frameBuffer, TimeSpan dt,
                        const vk::raii::Semaphore& previousRenderStepFinished) const;
 
         vk::raii::Semaphore& getRenderingFinishedSemaphore();
 
+        std::string_view getName() const override;
+        bool shouldExecute() const override;
+        ExecutionResult execute(
+            const ExecutionData& executionData,
+            vk::raii::CommandBuffer& commandBuffer) override;
     private:
         void recreatePipeline();
 
@@ -33,9 +39,5 @@ namespace dnm
 
         vk::raii::DescriptorPool m_descriptorPool{nullptr};
         vk::raii::DescriptorSet m_descriptorSet{nullptr};
-
-        vk::raii::CommandBuffer m_commandBuffer{nullptr};
-
-        vk::raii::Semaphore m_renderingFinished{nullptr};
     };
 } // namespace dnm
