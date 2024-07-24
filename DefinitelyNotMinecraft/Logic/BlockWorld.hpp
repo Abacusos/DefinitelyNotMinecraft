@@ -29,7 +29,8 @@ namespace dnm
             Created,
             InProgress,
             FinishedGeneration,
-            RequiresVisibilityUpdate,
+            RequiresOuterVisibilityUpdate,
+            RequiresFullVisibilityUpdate,
         };
 
         ChunkState requestChunk(glm::ivec2 chunkPosition);

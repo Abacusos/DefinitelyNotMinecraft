@@ -18,7 +18,24 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
   case ChunkState::FinishedGeneration: {
     break;
   }
-  case ChunkState::RequiresVisibilityUpdate: {
+  case ChunkState::RequiresFullVisibilityUpdate: {
+    BlockPosition position{};
+    position.chunkIndex = chunkPosition;
+    for (i64 localChunkY = 0; localChunkY < chunkHeight; ++localChunkY) {
+      for (auto localChunkZ = 0; localChunkZ < chunkLocalSize; ++localChunkZ) {
+        for (auto localChunkX = 0; localChunkX < chunkLocalSize;
+             ++localChunkX) {
+          position.positionWithinChunk = {localChunkX, localChunkY,
+                                          localChunkZ};
+          std::span data = chunk.data;
+          updateVisibilityBit(position, data);
+        }
+      }
+    }
+    chunk.state = ChunkState::FinishedGeneration;
+    break;
+  }
+  case ChunkState::RequiresOuterVisibilityUpdate: {
     BlockPosition position{};
     position.chunkIndex = chunkPosition;
     {
@@ -77,7 +94,7 @@ BlockWorld::ChunkState BlockWorld::requestChunk(glm::ivec2 chunkPosition) {
         status == std::future_status::ready) {
       // Although this is kind of pointless
       chunk.loadTask.get();
-      chunk.state = ChunkState::RequiresVisibilityUpdate;
+      chunk.state = ChunkState::RequiresOuterVisibilityUpdate;
       triggerVisibilityUpdateOnNeighbors(BlockPosition{chunkPosition});
     }
     break;
@@ -203,7 +220,7 @@ bool BlockWorld::isRenderingDirty(glm::ivec2 chunkPosition) const {
     return false;
   }
 
-  return it->second.state == ChunkState::RequiresVisibilityUpdate;
+  return it->second.state == ChunkState::RequiresOuterVisibilityUpdate;
 }
 
 std::span<const BlockType>
@@ -293,7 +310,7 @@ void BlockWorld::updateBlock(const BlockWorld::BlockPosition &position,
                              position.positionWithinChunk.x;
 
   it->second.data[heightOffset + inLayerOffset] = type;
-  it->second.state = ChunkState::RequiresVisibilityUpdate;
+  it->second.state = ChunkState::RequiresFullVisibilityUpdate;
   triggerVisibilityUpdateOnNeighbors(position);
 }
 
@@ -441,7 +458,7 @@ void BlockWorld::triggerVisibilityUpdateOnNeighbors(
       continue;
     }
     if (chunkIt->second.state == ChunkState::FinishedGeneration) {
-      chunkIt->second.state = ChunkState::RequiresVisibilityUpdate;
+      chunkIt->second.state = ChunkState::RequiresOuterVisibilityUpdate;
     }
   }
 }
