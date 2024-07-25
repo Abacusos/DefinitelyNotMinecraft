@@ -7,8 +7,6 @@ AlignConsecutiveAssignments:
   AcrossEmptyLines: false
   AcrossComments: true
   AlignCompound: false
-  AlignFunctionPointers: true
-  PadOperators: false
 AlignConsecutiveBitFields:
   Enabled: true
   AcrossEmptyLines: false
@@ -35,7 +33,6 @@ AllowAllArgumentsOnNextLine: true
 AllowAllParametersOfDeclarationOnNextLine: false
 AllowShortBlocksOnASingleLine: Empty
 AllowShortCaseLabelsOnASingleLine: false
-AllowShortCompoundRequirementOnASingleLine: true
 AllowShortEnumsOnASingleLine: false
 AllowShortFunctionsOnASingleLine: Inline
 AllowShortIfStatementsOnASingleLine: Never
@@ -65,7 +62,6 @@ BraceWrapping:
   SplitEmptyFunction: false
   SplitEmptyRecord: false
   SplitEmptyNamespace: false
-BreakAdjacentStringLiterals: true
 BreakAfterAttributes: Never
 BreakBeforeBinaryOperators: NonAssignment
 BreakBeforeBraces: Custom
@@ -83,19 +79,33 @@ EmptyLineBeforeAccessModifier: Always
 FixNamespaceComments: true
 IncludeBlocks: Regroup
 IncludeCategories:
-  - CaseSensitive: false
+  - Regex: '[<][a-z]+[>]'
+    CaseSensitive: false
     Priority: 1
-    Regex: "[<][a-z]+[>]"
-  - Regex: "[<]Core[a-zA-Z\\/]+.hpp[>]"
-    Priority: 2
-  - Regex: "[<]Logic[a-zA-Z\\/]+.hpp[>]"
+  - Regex: '[<]vulkan[a-zA-Z\\/\_]+.hpp[>]'
+    CaseSensitive: false
     Priority: 3
-  - Regex: "[<]Rendering[a-zA-Z\\/]+.hpp[>]"
-    Priority: 4
-  - Regex: "[<]RenderingNodes[a-zA-Z\\/]+.hpp[>]"
+  - Regex: '[<]tracy[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
     Priority: 5
-  - Priority: 6
-    Regex: "[<]Shader[a-zA-Z\\/]+.hpp[>]"
+  - Regex: '\"imgui[a-zA-Z\_]*.h\"'
+    CaseSensitive: false
+    Priority: 7
+  - Regex: '[<]Core[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
+    Priority: 10
+  - Regex: '[<]Logic[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
+    Priority: 15
+  - Regex: '[<]Rendering[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
+    Priority: 20
+  - Regex: '[<]RenderingNodes[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
+    Priority: 25
+  - Regex: '[<]Shader[a-zA-Z\\/]+.hpp[>]'
+    CaseSensitive: false
+    Priority: 30
 IndentAccessModifiers: false
 IndentCaseBlocks: false
 IndentCaseLabels: true
@@ -140,7 +150,6 @@ SpaceBeforeParensOptions:
   AfterRequiresInClause: true
   BeforeNonEmptyParentheses: false
   AfterRequiresInExpression: true
-  AfterPlacementOperator: true
 SpaceBeforeRangeBasedForLoopColon: true
 SpaceBeforeSquareBrackets: true
 SpaceInEmptyBlock: false

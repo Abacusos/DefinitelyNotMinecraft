@@ -6,8 +6,8 @@
 
 namespace dnm
 {
-    struct ReflectedShader
-    {
-        std::vector<InternedString> defines;
-    };
-} // namespace dnm
+struct ReflectedShader
+{
+    std::vector<InternedString> defines;
+};
+}   // namespace dnm

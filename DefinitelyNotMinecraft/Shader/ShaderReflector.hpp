@@ -1,21 +1,20 @@
 #pragma once
 
-#include <string_view>
-
 #include <Shader/ReflectedShader.hpp>
+
+#include <string_view>
 
 namespace dnm
 {
-    class StringInterner;
+class StringInterner;
 
-    class ShaderReflector
-    {
+class ShaderReflector {
     public:
-        ShaderReflector(StringInterner* interner);
+    ShaderReflector(StringInterner* interner);
 
-        ReflectedShader reflectShader(std::string_view view) const;
+    ReflectedShader reflectShader(std::string_view view) const;
 
     private:
-        StringInterner* m_interner;
-    };
-} // namespace dnm
+    StringInterner* m_interner;
+};
+}   // namespace dnm

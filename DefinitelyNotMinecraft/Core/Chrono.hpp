@@ -4,5 +4,5 @@
 
 namespace dnm
 {
-    using TimeSpan = std::chrono::duration<float, std::milli>;
+using TimeSpan = std::chrono::duration<float, std::milli>;
 }
