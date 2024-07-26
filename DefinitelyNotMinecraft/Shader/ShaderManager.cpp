@@ -67,8 +67,10 @@ namespace
         }
     }
 
-    constexpr std::string_view includeSearchView    = "#include \"";
-    constexpr std::string_view includeSearchViewEnd = "\"\r\n";
+    constexpr std::string_view includeSearchView = "#include \"";
+    constexpr std::string_view bindingSearchView = "binding = ";
+    constexpr std::string_view lineEndViewEnd    = "\"\r\n";
+    constexpr std::string_view lineEnding        = "\r\n";
 
     void printShaderContent(std::string_view shader) {
         size_t lineCount = 1u;
@@ -120,6 +122,27 @@ ShaderHandle ShaderManager::registerShaderFile(InternedString filePath, vk::Shad
     return registerShaderFile(filePath, shaderStage, {});
 }
 
+void ShaderManager::getBindingSlots(std::span<InternedString> filePaths, std::vector<BindingSlot>& slots, vk::ShaderStageFlags& stageFlags) {
+    stageFlags = {};
+
+    for (auto filePath : filePaths) {
+        bool found = false;
+        for (auto& shader : m_shaders) {
+            if (shader.filePath == filePath) {
+                slots.reserve(m_shaders.size() * 2u);
+                slots.insert(slots.end(), shader.slots.begin(), shader.slots.end());
+                for (auto& includer : shader.includes) {
+                    getBindingSlots(m_shaders [includer.index].filePath, slots);
+                }
+                stageFlags |= shader.shaderStage;
+                found = true;
+                break;
+            }
+        }
+        assert(found);
+    }
+}
+
 ShaderHandle ShaderManager::registerShaderFile(InternedString filePath, vk::ShaderStageFlagBits shaderStage, std::optional<ShaderHandle> includer) {
     for (auto i = 0u, size = static_cast<u32>(m_shaders.size()); i < size; ++i) {
         auto& shader = m_shaders [i];
@@ -142,7 +165,7 @@ ShaderHandle ShaderManager::registerShaderFile(InternedString filePath, vk::Shad
 
     size_t includeStart = shader.shaderContent.find(includeSearchView);
     while (includeStart != std::string::npos) {
-        const size_t           includeEnd   = shader.shaderContent.find(includeSearchViewEnd, includeStart);
+        const size_t           includeEnd   = shader.shaderContent.find(lineEndViewEnd, includeStart);
         const char*            startInclude = shader.shaderContent.data() + includeStart + includeSearchView.size();
         const std::string_view includeView {startInclude, includeEnd - includeStart - includeSearchView.size()};
         const InternedString   internedInclude = m_interner->addOrGetString(includeView);
@@ -154,12 +177,73 @@ ShaderHandle ShaderManager::registerShaderFile(InternedString filePath, vk::Shad
     shader.reflection            = m_reflector.reflectShader(shader.shaderContent);
     shader.modificationTimeStamp = std::filesystem::last_write_time(filePathView);
 
+    size_t bindingStart = shader.shaderContent.find(bindingSearchView);
+    while (bindingStart != std::string::npos) {
+        auto uniqueBinding = ++m_nextUniqueBinding;
+        shader.shaderContent.insert(bindingStart + bindingSearchView.size(), std::to_string(uniqueBinding));
+        size_t bracketEnd = shader.shaderContent.find(')', bindingStart);
+        bracketEnd += 2;
+        auto firstKeywordEnd = shader.shaderContent.find(lineEnding, bracketEnd);
+        auto keyWordsAndName = std::string_view {&shader.shaderContent [bracketEnd], &shader.shaderContent [firstKeywordEnd]};
+
+        auto beginName = keyWordsAndName.find_last_of(' ') + 1;
+        auto name      = std::string_view {&keyWordsAndName [beginName], keyWordsAndName.size() - beginName};
+        auto keyWords  = std::string_view {keyWordsAndName.data(), beginName};
+
+        auto& slot = shader.slots.emplace_back();
+
+        if (keyWords.find("readonly") != keyWords.npos) {
+            slot.readonly = true;
+        }
+
+        if (keyWords.find("buffer") != keyWords.npos) {
+            slot.type = vk::DescriptorType::eStorageBuffer;
+        }
+        else if (keyWords.find("uniform sampler2D") != keyWords.npos) {
+            slot.type = vk::DescriptorType::eCombinedImageSampler;
+        }
+        else if (keyWords.find("uniform") != keyWords.npos) {
+            slot.type = vk::DescriptorType::eUniformBuffer;
+        }
+        else {
+            assert(false);
+        }
+
+        slot.bindingSlot = uniqueBinding;
+        slot.name        = name;
+
+        bindingStart = shader.shaderContent.find(bindingSearchView, bracketEnd);
+    }
+
     for (const auto& include : includes) {
         auto shaderHandle = registerShaderFile(include, vk::ShaderStageFlagBits::eAll, ShaderHandle {.index = index});
         m_shaders [index].includes.emplace_back(shaderHandle);
     }
 
     return ShaderHandle {.index = index};
+}
+
+void ShaderManager::getBindingSlots(InternedString filePath, std::vector<BindingSlot>& slots) {
+    for (auto& shader : m_shaders) {
+        if (shader.filePath == filePath) {
+            for (auto& slot : shader.slots) {
+                bool existsAlready = false;
+                for (auto& bindingSlot : slots) {
+                    if (bindingSlot.bindingSlot == slot.bindingSlot) {
+                        existsAlready = true;
+                        break;
+                    }
+                }
+                if (!existsAlready) {
+                    slots.insert(slots.end(), slot);
+                }
+            }
+
+            for (auto& includer : shader.includes) {
+                getBindingSlots(m_shaders [includer.index].filePath, slots);
+            }
+        }
+    }
 }
 
 std::optional<vk::raii::ShaderModule> ShaderManager::getCompiledVersion(const vk::raii::Device& device, ShaderHandle handle, std::span<Define> defines) const {
@@ -170,11 +254,11 @@ std::optional<vk::raii::ShaderModule> ShaderManager::getCompiledVersion(const vk
     for (auto includeHandle : m_shaders [handle.index].includes) {
         std::string_view fileName = m_interner->getStringView(m_shaders [includeHandle.index].filePath);
         std::string      include;
-        auto             includeLength = includeSearchView.size() + fileName.size() + includeSearchViewEnd.size();
+        auto             includeLength = includeSearchView.size() + fileName.size() + lineEndViewEnd.size();
         include.reserve(includeLength);
         include = includeSearchView;
         include.append(fileName);
-        include.append(includeSearchViewEnd);
+        include.append(lineEndViewEnd);
 
         const auto includeStart = completeShader.find(include);
         completeShader.replace(includeStart, includeLength, m_shaders [includeHandle.index].shaderContent);

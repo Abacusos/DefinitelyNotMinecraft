@@ -26,6 +26,9 @@ namespace
 
     constexpr std::string_view vertexShader   = "Shaders/World.vert";
     constexpr std::string_view fragmentShader = "Shaders/World.frag";
+        
+    constexpr std::string_view lightBindingPoint        = "lightBuffer";
+
 }   // namespace
 
 ForwardRenderingNode::ForwardRenderingNode(Config* config, Renderer* renderer, ShaderManager* shaderManager, BlockWorld* blockWorld, StringInterner* interner) :
@@ -197,28 +200,15 @@ IRenderingNode::ExecutionResult ForwardRenderingNode::execute(const ExecutionDat
 void ForwardRenderingNode::recreatePipeline() {
     m_renderer->waitIdle();
 
-    std::array layout {
-      // projection
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {
-                                                                 vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment       },
-      // view
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {
-                                                                 vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment       },
-      // transform
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {       vk::DescriptorType::eStorageBuffer, 1u,                                      vk::ShaderStageFlagBits::eVertex},
-      // block type
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {       vk::DescriptorType::eStorageBuffer, 1u,                                      vk::ShaderStageFlagBits::eVertex},
-      // light buffer
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {       vk::DescriptorType::eUniformBuffer, 1u,                                    vk::ShaderStageFlagBits::eFragment},
-      // texture sampler
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eCombinedImageSampler,  1,                                    vk::ShaderStageFlagBits::eFragment},
-    };
-
+    std::vector<BindingSlot> slots;
+    vk::ShaderStageFlags     stageFlags;
+    std::array               internedString {m_interner->addOrGetString(vertexShader), m_interner->addOrGetString(fragmentShader)};
+    m_shaderManager->getBindingSlots(internedString, slots, stageFlags);
     const auto& device = m_renderer->getDevice();
 
     m_descriptorSet.clear();
-
-    m_descriptorSetLayout = makeDescriptorSetLayout(device, layout);
+    
+    m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
     m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
     auto sets       = vk::raii::DescriptorSets(device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
@@ -250,19 +240,18 @@ void ForwardRenderingNode::recreatePipeline() {
     assert(transform);
 
     std::array update {
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,           *viewBuffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,            *transform, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,            *blockType, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,  m_lightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {projectionBufferBindingPoint, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {viewBufferBindingPoint,           *viewBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {transformBindingPoint,            *transform, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {blockTypeBindingPoint,            *blockType, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {lightBindingPoint,  m_lightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
     };
 
-    updateDescriptorSets(device, m_descriptorSet, update, {m_textureData});
+    std::array textureUpdate {
+        TextureSlotUpdate{"tex;", m_textureData}
+    };
+
+    updateDescriptorSets(device, m_descriptorSet, update, slots, textureUpdate);
 }
 
 void ForwardRenderingNode::recompileShadersIfNecessary(bool force) {

@@ -2,7 +2,7 @@
 
 #include "Shaders/CameraBuffer.glsl"
 
-layout (std140, binding = 2) readonly buffer transformBuffer
+layout (std140, binding = ) readonly buffer transformBuffer
 {
   vec4 transforms[];
 };
@@ -14,7 +14,7 @@ struct BlockData{
     uint8_t padding;
     uint8_t padding2;
 };
-layout (std430, binding = 3) readonly buffer blockTypeBuffer
+layout (std430, binding = ) readonly buffer blockTypeBuffer
 {
   BlockData blockData[];
 };

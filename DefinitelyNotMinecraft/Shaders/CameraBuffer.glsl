@@ -1,9 +1,9 @@
-layout (std140, binding = 0) uniform projectionBuffer
+layout (std140, binding = ) uniform projectionBuffer
 {
   mat4 projection;
 };
 
-layout (std140, binding = 1) uniform viewBuffer
+layout (std140, binding = ) uniform viewBuffer
 {
   mat4 view;
   vec4 cameraPos;

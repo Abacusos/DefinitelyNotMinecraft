@@ -18,6 +18,11 @@ namespace
     constexpr std::string_view localWGSizeY = "LOCAL_SIZE_Y";
     constexpr std::string_view localWGSizeZ = "LOCAL_SIZE_Z";
 
+    constexpr std::string_view worldDataBindingPoint      = "worldDataBuffer";
+    constexpr std::string_view chunkConstantsBindingPoint = "chunkConstants";
+    constexpr std::string_view chunkRemapBindingPoint     = "chunkIndexRemap";
+    constexpr std::string_view cullingBindingPoint        = "cullingData";
+
     struct alignas(16) Plane
     {
         v3    normal;
@@ -59,32 +64,15 @@ std::string_view BlockDrawCallNode::getName() const {
 void BlockDrawCallNode::recreatePipeline() {
     m_renderer->waitIdle();
 
-    std::array layout {
-      // projection
-      std::tuple {vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // view
-      std::tuple {vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // transform
-      std::tuple {vk::DescriptorType::eStorageBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // block type
-      std::tuple {vk::DescriptorType::eStorageBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // world data block type
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eStorageBuffer, 1u,                                    vk::ShaderStageFlagBits::eCompute},
-      // draw call buffer
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eStorageBuffer, 1u,                                    vk::ShaderStageFlagBits::eCompute},
-      // constexpr chunk constants
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eUniformBuffer, 1u,                                    vk::ShaderStageFlagBits::eCompute},
-      // remap index
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eStorageBuffer, 1u,                                    vk::ShaderStageFlagBits::eCompute},
-      // culling data
-      std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags> {vk::DescriptorType::eUniformBuffer, 1u,                                    vk::ShaderStageFlagBits::eCompute}
-    };
-
     const auto& device = m_renderer->getDevice();
 
     m_descriptorSet.clear();
 
-    m_descriptorSetLayout = makeDescriptorSetLayout(device, layout);
+    std::vector<BindingSlot> slots;
+    vk::ShaderStageFlags stageFlags;
+    auto internedString = m_interner->addOrGetString(computeShader);
+    m_shaderManager->getBindingSlots(std::span{&internedString, 1u}, slots, stageFlags);
+    m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
     m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
     auto sets       = vk::raii::DescriptorSets(device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
@@ -99,27 +87,18 @@ void BlockDrawCallNode::recreatePipeline() {
     assert(viewBuffer);
 
     std::array update {
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,         *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,                   *viewBuffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,      m_transformBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,      m_blockTypeBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,      m_worldDataBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,    m_drawCommandBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer, m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eStorageBuffer,      m_chunkRemapIndex.buffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,          m_cullingData.buffer, VK_WHOLE_SIZE, nullptr}
+      DescriptorSlotUpdate {projectionBufferBindingPoint,         *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {      viewBufferBindingPoint,                   *viewBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       transformBindingPoint,      m_transformBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       blockTypeBindingPoint,      m_blockTypeBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       worldDataBindingPoint,      m_worldDataBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {     drawCommandBindingPoint,    m_drawCommandBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {  chunkConstantsBindingPoint, m_chunkConstantsBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {      chunkRemapBindingPoint,      m_chunkRemapIndex.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {         cullingBindingPoint,          m_cullingData.buffer, VK_WHOLE_SIZE, nullptr}
     };
 
-    updateDescriptorSets(device, m_descriptorSet, update);
+    updateDescriptorSets(device, m_descriptorSet, update, slots);
 }
 
 void BlockDrawCallNode::recompileShadersIfNecessary(bool force) {

@@ -28,6 +28,8 @@
 
 #include <Rendering/GlobalBuffers.hpp>
 
+#include <Shader/ShaderManager.hpp>
+
 #include <GLFW/glfw3.h>
 
 namespace dnm
@@ -496,6 +498,12 @@ vk::raii::DescriptorSetLayout makeDescriptorSetLayout(
   std::span<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>> bindingData,
   vk::DescriptorSetLayoutCreateFlags                                   flags = {});
 
+vk::raii::DescriptorSetLayout makeDescriptorSetLayout(
+  const vk::raii::Device&            device,
+  std::span<BindingSlot>             bindingData,
+  vk::ShaderStageFlags               stageFlags,
+  vk::DescriptorSetLayoutCreateFlags flags = {});
+
 vk::raii::Device makeDevice(
   const vk::raii::PhysicalDevice&   physicalDevice,
   u32                               queueFamilyIndex,
@@ -588,6 +596,27 @@ void updateDescriptorSets(
   const vk::raii::Device&                                                                                         device,
   const vk::raii::DescriptorSet&                                                                                  descriptorSet,
   std::span<std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*>> bufferData);
+
+struct DescriptorSlotUpdate
+{
+    std::string_view            name;
+    const vk::raii::Buffer&     buffer;
+    const vk::DeviceSize        size       = VK_WHOLE_SIZE;
+    const vk::raii::BufferView* bufferView = nullptr;
+};
+
+struct TextureSlotUpdate
+{
+    std::string_view   name;
+    const TextureData& textureData;
+};
+
+void updateDescriptorSets(
+  const vk::raii::Device&         device,
+  const vk::raii::DescriptorSet&  descriptorSet,
+  std::span<DescriptorSlotUpdate> slotUpdates,
+  std::span<BindingSlot>          slots,
+  std::span<TextureSlotUpdate>          textures = {});
 
 std::vector<std::string> getDeviceExtensions();
 

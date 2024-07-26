@@ -8,7 +8,7 @@ struct DrawCall
     uint globalIndexFace;
 };
 
-layout (std140, binding = 2) buffer transformBuffer
+layout (std140, binding = ) buffer transformBuffer
 {
     vec4 transforms[];
 };
@@ -21,22 +21,22 @@ struct BlockData{
     uint8_t padding2;
 };
 
-layout (std430, binding = 3) buffer blockTypeBuffer
+layout (std430, binding = ) buffer blockTypeBuffer
 {
     BlockData blockData[];
 };
 
-layout (std430, binding = 4) readonly buffer worldDataBuffer
+layout (std430, binding = ) readonly buffer worldDataBuffer
 {
     uint16_t blockTypeWorld[];
 };
 
-layout (binding = 5) buffer drawCallBuffer
+layout (binding = ) buffer drawCallBuffer
 {
     DrawCall drawcall;
 };
 
-layout (binding = 6) readonly uniform chunkConstants
+layout (binding = ) readonly uniform chunkConstants
 {
     int chunkLoadCount;
     int chunksOneDimension;
@@ -44,7 +44,7 @@ layout (binding = 6) readonly uniform chunkConstants
     int chunkHeight;
 };
 
-layout (binding = 7) readonly buffer chunkIndexRemap
+layout (binding = ) readonly buffer chunkIndexRemap
 {
     uint remapIndex[];
 };
@@ -55,7 +55,7 @@ struct Plane
     float dist;
 };
 
-layout (binding = 8) readonly uniform cullingData
+layout (binding = ) readonly uniform cullingData
 {
 	Plane planes[6];
 	uint cullingEnabled;

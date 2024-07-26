@@ -82,23 +82,16 @@ IRenderingNode::ExecutionResult GizmoRenderingNode::execute(const ExecutionData&
 void GizmoRenderingNode::recreatePipeline() {
     m_renderer->waitIdle();
 
-    std::array layout {
-      // projection
-      std::tuple {vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute},
-      // view
-      std::tuple {vk::DescriptorType::eUniformBuffer, 1u, vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eCompute}
-    };
-
-    std::array sizes {
-      vk::DescriptorPoolSize {vk::DescriptorType::eUniformBuffer, 2u}
-    };
-
     const auto& device = m_renderer->getDevice();
 
     m_descriptorSet.clear();
 
-    m_descriptorSetLayout = makeDescriptorSetLayout(device, layout);
-    m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
+    std::vector<BindingSlot> slots;
+    vk::ShaderStageFlags     stageFlags;
+    std::array               internedString {m_interner->addOrGetString(vertexShader), m_interner->addOrGetString(fragmentShader)};
+    m_shaderManager->getBindingSlots(internedString, slots, stageFlags);
+    m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
+    m_pipelineLayout = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
     auto sets       = vk::raii::DescriptorSets(device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
     m_descriptorSet = std::move(sets.front());
@@ -129,13 +122,11 @@ void GizmoRenderingNode::recreatePipeline() {
     assert(viewBuffer);
 
     std::array update {
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
-      std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*> {
-                                                                                                            vk::DescriptorType::eUniformBuffer,           *viewBuffer, VK_WHOLE_SIZE, nullptr}
+      DescriptorSlotUpdate {projectionBufferBindingPoint, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {      viewBufferBindingPoint,           *viewBuffer, VK_WHOLE_SIZE, nullptr}
     };
 
-    updateDescriptorSets(device, m_descriptorSet, update);
+    updateDescriptorSets(device, m_descriptorSet, update, slots);
 }
 
 void GizmoRenderingNode::recompileShadersIfNecessary(bool force) {

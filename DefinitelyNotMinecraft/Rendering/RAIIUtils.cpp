@@ -2,6 +2,8 @@
 
 #include <Rendering/Renderer.hpp>
 
+#include <Shader/ShaderManager.hpp>
+
 namespace dnm
 {
 vk::raii::DeviceMemory dnm::allocateDeviceMemory(
@@ -212,7 +214,7 @@ vk::raii::DescriptorPool dnm::makeDescriptorPool(const vk::raii::Device& device,
     return vk::raii::DescriptorPool(device, descriptorPoolCreateInfo);
 }
 
-vk::raii::DescriptorSetLayout dnm::makeDescriptorSetLayout(
+vk::raii::DescriptorSetLayout makeDescriptorSetLayout(
   const vk::raii::Device&                                              device,
   std::span<std::tuple<vk::DescriptorType, u32, vk::ShaderStageFlags>> bindingData,
   vk::DescriptorSetLayoutCreateFlags                                   flags) {
@@ -223,6 +225,19 @@ vk::raii::DescriptorSetLayout dnm::makeDescriptorSetLayout(
     }
     const vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(flags, bindings);
     return vk::raii::DescriptorSetLayout(device, descriptorSetLayoutCreateInfo);
+}
+
+vk::raii::DescriptorSetLayout makeDescriptorSetLayout(
+  const vk::raii::Device&            device,
+  std::span<BindingSlot>             bindingData,
+  vk::ShaderStageFlags               stageFlags,
+  vk::DescriptorSetLayoutCreateFlags flags) {
+    std::vector<vk::DescriptorSetLayoutBinding> bindings(bindingData.size());
+    for (size_t i = 0; i < bindingData.size(); i++) {
+        bindings [i] = vk::DescriptorSetLayoutBinding {bindingData [i].bindingSlot, bindingData [i].type, 1u, stageFlags};
+    }
+    const vk::DescriptorSetLayoutCreateInfo descriptorSetLayoutCreateInfo(flags, bindings);
+    return {device, descriptorSetLayoutCreateInfo};
 }
 
 vk::raii::Device dnm::makeDevice(
@@ -394,7 +409,7 @@ vk::raii::Instance dnm::makeInstance(
     // in debug mode, addionally use the debugUtilsMessengerCallback in instance
     // creation!
     vk::DebugUtilsMessageSeverityFlagsEXT severityFlags(vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError);
-    vk::DebugUtilsMessageTypeFlagsEXT     messageTypeFlags(
+    vk::DebugUtilsMessageTypeFlagsEXT messageTypeFlags(
       vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation);
 
     vk::StructureChain<vk::InstanceCreateInfo, vk::DebugUtilsMessengerCreateInfoEXT> instanceCreateInfo(
@@ -698,7 +713,7 @@ void dnm::updateDescriptorSets(
     device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void dnm::updateDescriptorSets(
+void updateDescriptorSets(
   const vk::raii::Device&                                                                                         device,
   const vk::raii::DescriptorSet&                                                                                  descriptorSet,
   std::span<std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*>> bufferData) {
@@ -717,6 +732,56 @@ void dnm::updateDescriptorSets(
         writeDescriptorSets.emplace_back(
           *descriptorSet, dstBinding++, 0, 1, std::get<0>(bd), nullptr, &bufferInfos.back(), std::get<3>(bd) ? &bufferView : nullptr);
     }
+    device.updateDescriptorSets(writeDescriptorSets, nullptr);
+}
+
+void updateDescriptorSets(
+  const vk::raii::Device&         device,
+  const vk::raii::DescriptorSet&  descriptorSet,
+  std::span<DescriptorSlotUpdate> slotUpdates,
+  std::span<BindingSlot>          slots,
+  std::span<TextureSlotUpdate>    textureData) {
+    std::vector<vk::DescriptorBufferInfo> bufferInfos;
+    bufferInfos.reserve(slotUpdates.size());
+
+    std::vector<vk::WriteDescriptorSet> writeDescriptorSets;
+    writeDescriptorSets.reserve(slotUpdates.size() + 1);
+
+    for (auto& slotUpdate : slotUpdates) {
+        bool foundSlot = false;
+        for (auto& slot : slots) {
+            if (slot.name == slotUpdate.name) {
+                foundSlot = true;
+                bufferInfos.emplace_back(*slotUpdate.buffer, 0, slotUpdate.size);
+                vk::BufferView bufferView;
+                if (slotUpdate.bufferView) {
+                    bufferView = **slotUpdate.bufferView;
+                }
+
+                writeDescriptorSets.emplace_back(
+                  *descriptorSet, slot.bindingSlot, 0, 1, slot.type, nullptr, &bufferInfos.back(), slotUpdate.bufferView ? &bufferView : nullptr);
+                break;
+            }
+        }
+        assert(foundSlot);
+    }
+    std::vector<vk::DescriptorImageInfo> imageInfos;
+    for (auto& texture : textureData) {
+
+        bool foundSlot = false;
+        for (auto& slot : slots) {
+            if (slot.name == texture.name) {
+                foundSlot = true;
+                imageInfos.reserve(textureData.size());
+                imageInfos.emplace_back(*texture.textureData.sampler, *texture.textureData.imageData.imageView, vk::ImageLayout::eShaderReadOnlyOptimal);
+                writeDescriptorSets.emplace_back(
+                  *descriptorSet, slot.bindingSlot, 0, 1, vk::DescriptorType::eCombinedImageSampler, &imageInfos.back(), nullptr, nullptr);
+                break;
+            }
+        }
+        assert(foundSlot);
+    }
+
     device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 

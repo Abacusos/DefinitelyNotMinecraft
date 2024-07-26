@@ -4,7 +4,7 @@
 
 #include "Shaders/CameraBuffer.glsl"
 
-layout (std140, binding = 4) uniform lightBuffer
+layout (std140, binding = ) uniform lightBuffer
 {
   vec3 lightColor;  
   float ambientStrength;
@@ -13,7 +13,7 @@ layout (std140, binding = 4) uniform lightBuffer
 
 };
 
-layout (binding = 5) uniform sampler2D tex;
+layout (binding = ) uniform sampler2D tex;
 
 layout (location = 0) in vec2 inTexCoord;
 layout (location = 1) in vec3 inNormal;
