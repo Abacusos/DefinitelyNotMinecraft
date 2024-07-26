@@ -91,7 +91,7 @@ void GizmoRenderingNode::recreatePipeline() {
     std::array               internedString {m_interner->addOrGetString(vertexShader), m_interner->addOrGetString(fragmentShader)};
     m_shaderManager->getBindingSlots(internedString, slots, stageFlags);
     m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
-    m_pipelineLayout = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
+    m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
     auto sets       = vk::raii::DescriptorSets(device, {*m_renderer->getDescriptorPool(), *m_descriptorSetLayout});
     m_descriptorSet = std::move(sets.front());

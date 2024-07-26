@@ -616,7 +616,7 @@ void updateDescriptorSets(
   const vk::raii::DescriptorSet&  descriptorSet,
   std::span<DescriptorSlotUpdate> slotUpdates,
   std::span<BindingSlot>          slots,
-  std::span<TextureSlotUpdate>          textures = {});
+  std::span<TextureSlotUpdate>    textures = {});
 
 std::vector<std::string> getDeviceExtensions();
 

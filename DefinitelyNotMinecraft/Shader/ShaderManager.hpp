@@ -46,7 +46,7 @@ class ShaderManager {
 
     private:
     ShaderHandle registerShaderFile(InternedString filePath, vk::ShaderStageFlagBits shaderStage, std::optional<ShaderHandle> includer);
-    void getBindingSlots(InternedString filePath, std::vector<BindingSlot>& slots);
+    void         getBindingSlots(InternedString filePath, std::vector<BindingSlot>& slots);
 
     StringInterner* m_interner;
     ShaderReflector m_reflector;

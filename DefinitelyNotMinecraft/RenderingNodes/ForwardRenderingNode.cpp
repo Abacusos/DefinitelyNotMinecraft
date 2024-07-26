@@ -26,8 +26,8 @@ namespace
 
     constexpr std::string_view vertexShader   = "Shaders/World.vert";
     constexpr std::string_view fragmentShader = "Shaders/World.frag";
-        
-    constexpr std::string_view lightBindingPoint        = "lightBuffer";
+
+    constexpr std::string_view lightBindingPoint = "lightBuffer";
 
 }   // namespace
 
@@ -207,7 +207,7 @@ void ForwardRenderingNode::recreatePipeline() {
     const auto& device = m_renderer->getDevice();
 
     m_descriptorSet.clear();
-    
+
     m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
     m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
@@ -241,14 +241,14 @@ void ForwardRenderingNode::recreatePipeline() {
 
     std::array update {
       DescriptorSlotUpdate {projectionBufferBindingPoint, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {viewBufferBindingPoint,           *viewBuffer, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {transformBindingPoint,            *transform, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {blockTypeBindingPoint,            *blockType, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {lightBindingPoint,  m_lightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {      viewBufferBindingPoint,           *viewBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       transformBindingPoint,            *transform, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       blockTypeBindingPoint,            *blockType, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {           lightBindingPoint,  m_lightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
     };
 
     std::array textureUpdate {
-        TextureSlotUpdate{"tex;", m_textureData}
+      TextureSlotUpdate {"tex;", m_textureData}
     };
 
     updateDescriptorSets(device, m_descriptorSet, update, slots, textureUpdate);

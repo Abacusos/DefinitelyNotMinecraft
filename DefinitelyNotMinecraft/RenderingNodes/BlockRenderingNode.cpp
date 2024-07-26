@@ -69,9 +69,9 @@ void BlockDrawCallNode::recreatePipeline() {
     m_descriptorSet.clear();
 
     std::vector<BindingSlot> slots;
-    vk::ShaderStageFlags stageFlags;
-    auto internedString = m_interner->addOrGetString(computeShader);
-    m_shaderManager->getBindingSlots(std::span{&internedString, 1u}, slots, stageFlags);
+    vk::ShaderStageFlags     stageFlags;
+    auto                     internedString = m_interner->addOrGetString(computeShader);
+    m_shaderManager->getBindingSlots(std::span {&internedString, 1u}, slots, stageFlags);
     m_descriptorSetLayout = makeDescriptorSetLayout(device, slots, stageFlags);
     m_pipelineLayout      = vk::raii::PipelineLayout(device, {{}, *m_descriptorSetLayout});
 
