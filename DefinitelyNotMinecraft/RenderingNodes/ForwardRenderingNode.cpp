@@ -15,6 +15,8 @@ namespace dnm
 {
 namespace
 {
+    constexpr bool TestLights = false;
+
     struct LightConstants
     {
         int   lightCount;
@@ -22,14 +24,6 @@ namespace
         float smoothstepMax;
         float ambientStrength;
         float specularStrength;
-    };
-
-    struct PerLightBuffer
-    {
-        v3    lightColor;
-        float padding = 0.0f;
-        v3    lightPos;
-        float padding2 = 0.0f;
     };
 
     constexpr std::string_view vertexShader   = "Shaders/World.vert";
@@ -150,11 +144,35 @@ ForwardRenderingNode::ForwardRenderingNode(Config* config, Renderer* renderer, S
       "Light Constants",
       vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
 
-    m_perLightBuffer = m_renderer->createBuffer(
-      sizeof(PerLightBuffer) * 3,
-      vk::BufferUsageFlagBits::eStorageBuffer,
-      "Light Buffer",
-      vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
+    if constexpr (TestLights) {
+        m_perLightBuffer = m_renderer->createBuffer(
+          sizeof(PerLightBuffer) * lightLength * lightLength,
+          vk::BufferUsageFlagBits::eStorageBuffer,
+          "Light Buffer",
+          vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
+
+        std::random_device               rd;          
+        std::mt19937                     gen(rd());  
+        std::uniform_real_distribution<> dis(0.0, 1.0);
+
+        constexpr float offset = 300.0f;
+        constexpr float step   = 50.0f;
+        for (u32 y = 0; y < lightLength; ++y) {
+            for (u32 x = 0; x < lightLength; ++x) {
+                lightTest [y * lightLength + x] = PerLightBuffer {
+                  .lightColor = v3 {dis(gen),   dis(gen),              dis(gen)},
+                     .lightPos = {                           offset + x * step, 170.0f, offset + y * step}
+                };
+            }
+        }
+    }
+    else {
+        m_perLightBuffer = m_renderer->createBuffer(
+          sizeof(PerLightBuffer) * 3,
+          vk::BufferUsageFlagBits::eStorageBuffer,
+          "Light Buffer",
+          vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
+    }
 
     recompileShadersIfNecessary(true);
 }
@@ -175,16 +193,31 @@ IRenderingNode::ExecutionResult ForwardRenderingNode::execute(const ExecutionDat
     recompileShadersIfNecessary();
     const auto extent = m_renderer->getExtent();
 
-    if (m_config->updateLight) {
-        std::array buffer {
-          PerLightBuffer { m_config->lightColor, 0.0f,  m_config->lightPosition},
-          PerLightBuffer {m_config->lightColor2, 0.0f, m_config->lightPosition2},
-          PerLightBuffer {m_config->lightColor3, 0.0f, m_config->lightPosition3}
-        };
-        copyToDevice(m_perLightBuffer.deviceMemory, std::span<const PerLightBuffer> {buffer.data(), 3u});
-        LightConstants constants {m_config->lightCount, m_config->specularPow, m_config->smoothstepMax, m_config->ambientStrength, m_config->specularStrength};
+    if constexpr (TestLights) {
+        auto now = std::chrono::system_clock::now();
+        for (auto& perLight : lightTest) {
+            perLight.lightPos.y = 170.0f - ((now.time_since_epoch().count() % 10000000) / 10000000.0f) * 100.0f;
+        }
+
+        copyToDevice(m_perLightBuffer.deviceMemory, std::span<const PerLightBuffer> {lightTest.data(), lightLength * lightLength});
+        LightConstants constants {
+          lightLength * lightLength, m_config->specularPow, m_config->smoothstepMax, m_config->ambientStrength, m_config->specularStrength};
         copyToDevice(m_lightConstants.deviceMemory, std::span<const LightConstants> {&constants, 1u});
-        m_config->updateLight = false;
+    }
+    else {
+        if (m_config->updateLight) {
+
+            std::array buffer {
+              PerLightBuffer { m_config->lightColor, 0.0f,  m_config->lightPosition},
+              PerLightBuffer {m_config->lightColor2, 0.0f, m_config->lightPosition2},
+              PerLightBuffer {m_config->lightColor3, 0.0f, m_config->lightPosition3}
+            };
+            copyToDevice(m_perLightBuffer.deviceMemory, std::span<const PerLightBuffer> {buffer.data(), 3u});
+            LightConstants constants {
+              m_config->lightCount, m_config->specularPow, m_config->smoothstepMax, m_config->ambientStrength, m_config->specularStrength};
+            copyToDevice(m_lightConstants.deviceMemory, std::span<const LightConstants> {&constants, 1u});
+            m_config->updateLight = false;
+        }
     }
 
     {

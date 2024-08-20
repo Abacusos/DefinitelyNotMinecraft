@@ -52,5 +52,15 @@ class ForwardRenderingNode : public IRenderingNode {
     vk::raii::Pipeline m_graphicsPipeline {nullptr};
 
     GPUProfilerContext m_renderingProfilerContext;
+
+    struct PerLightBuffer
+    {
+        v3    lightColor;
+        float padding = 0.0f;
+        v3    lightPos;
+        float padding2 = 0.0f;
+    };
+    constexpr static u32 lightLength = 10;
+    std::array<PerLightBuffer, lightLength * lightLength> lightTest;
 };
 }   // namespace dnm

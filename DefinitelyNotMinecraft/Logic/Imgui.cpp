@@ -58,6 +58,7 @@ void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const {
         ImGui::InputInt("Light Count", &m_config->lightCount);
         ImGui::InputFloat("Ambient Strength", &m_config->ambientStrength);
         ImGui::InputFloat("Specular Strength", &m_config->specularStrength);
+        ImGui::InputFloat("Smoothstep Falloff", &m_config->smoothstepMax);
 
         ImGui::InputFloat3("Light Color", &m_config->lightColor.x);
         ImGui::InputFloat3("Light Pos", &m_config->lightPosition.x);

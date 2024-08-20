@@ -57,8 +57,5 @@ void main()
         finalResult += ambient + diffuse + specular;
     }
 
-    finalResult /= lightCount;
-
-
     outColor = vec4(finalResult * (texture(tex, inTexCoord)).xyz, 1.0f);
 }
