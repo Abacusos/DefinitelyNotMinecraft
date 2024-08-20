@@ -15,11 +15,11 @@ namespace
 }   // namespace
 
 BlockWorld::BlockWorld(Config* config) : m_config {config} {
-    auto threadLambda = [this]()
+    auto threadLambda = [this](const std::stop_token& stopToken)
     {
         std::optional<GenerationData> chunkToGenerate;
 
-        while (true) {
+        while (!stopToken.stop_requested()) {
             {
                 std::lock_guard l {m_workInsertionLock};
                 if (!m_chunkPositionsQueue.empty()) {

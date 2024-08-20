@@ -64,8 +64,6 @@ class BlockWorld {
 
     std::vector<BlockType> m_blockTypesWorld;
 
-    std::jthread m_generationThread;
-
     std::mutex m_workInsertionLock;
 
     struct GenerationData
@@ -104,5 +102,8 @@ class BlockWorld {
     siv::BasicPerlinNoise<float> m_noiseCobble {84};
     siv::BasicPerlinNoise<float> m_noiseStone {126};
     siv::BasicPerlinNoise<float> m_noiseSand {168};
+
+    // Thread should be cancelled first on destruction, so move to the end to avoid any access to deleted data structures.
+    std::jthread m_generationThread;
 };
 }   // namespace dnm
