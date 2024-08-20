@@ -20,9 +20,17 @@ struct Config
 
     v3 lookingAt;
 
-    v3    lightColor {1.0f, 1.0f, 1.0f};
-    float ambientStrength = 0.1f;
-    v3    lightPosition {500.0f, 170.0f, 500.0f};
+    int   lightCount       = 3;
+    int   specularPow      = 16;
+    float smoothstepMax    = 200.0f;
+    float ambientStrength  = 0.1f;
     float specularStrength = 0.5f;
+
+    v3 lightColor {1.0f, 0.0f, 0.0f};
+    v3 lightPosition {400.0f, 170.0f, 500.0f};
+    v3 lightColor2 {0.0f, 1.0f, 0.0f};
+    v3 lightPosition2 {600.0f, 170.0f, 500.0f};
+    v3 lightColor3 {0.0f, 0.0f, 1.0f};
+    v3 lightPosition3 {500.0f, 170.0f, 600.0f};
 };
 }   // namespace dnm

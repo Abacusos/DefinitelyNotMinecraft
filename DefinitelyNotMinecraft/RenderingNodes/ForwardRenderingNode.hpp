@@ -40,7 +40,8 @@ class ForwardRenderingNode : public IRenderingNode {
     vk::raii::ShaderModule m_vertexShaderModule {nullptr};
     vk::raii::ShaderModule m_fragmentShaderModule {nullptr};
 
-    dnm::BufferData  m_lightBuffer {nullptr};
+    dnm::BufferData  m_lightConstants {nullptr};
+    dnm::BufferData  m_perLightBuffer {nullptr};
     dnm::TextureData m_textureData {nullptr};
 
     vk::raii::DescriptorSetLayout m_descriptorSetLayout {nullptr};

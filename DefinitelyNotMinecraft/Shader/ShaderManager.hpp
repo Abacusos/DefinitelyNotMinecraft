@@ -17,7 +17,8 @@ class StringInterner;
 
 struct BindingSlot
 {
-    std::string_view   name;
+    // Currently a string because the shader content is not stable until all bindings are injected
+    std::string        name;
     u32                bindingSlot;
     vk::DescriptorType type;
     bool               readonly = false;

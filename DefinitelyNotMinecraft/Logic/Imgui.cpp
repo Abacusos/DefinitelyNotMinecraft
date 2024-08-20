@@ -55,10 +55,16 @@ void Imgui::logicFrame(TimeSpan dt, const Camera* camera) const {
 
         ImGui::BeginGroup();
 
-        ImGui::InputFloat3("Light Color", &m_config->lightColor.x);
+        ImGui::InputInt("Light Count", &m_config->lightCount);
         ImGui::InputFloat("Ambient Strength", &m_config->ambientStrength);
-        ImGui::InputFloat3("Light Pos", &m_config->lightPosition.x);
         ImGui::InputFloat("Specular Strength", &m_config->specularStrength);
+
+        ImGui::InputFloat3("Light Color", &m_config->lightColor.x);
+        ImGui::InputFloat3("Light Pos", &m_config->lightPosition.x);
+        ImGui::InputFloat3("Light Color2", &m_config->lightColor2.x);
+        ImGui::InputFloat3("Light Pos2", &m_config->lightPosition2.x);
+        ImGui::InputFloat3("Light Color3", &m_config->lightColor3.x);
+        ImGui::InputFloat3("Light Pos3", &m_config->lightPosition3.x);
 
         ImGui::Checkbox("Update Light Buffer", &m_config->updateLight);
 

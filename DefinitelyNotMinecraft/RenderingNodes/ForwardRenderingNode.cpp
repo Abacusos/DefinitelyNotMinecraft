@@ -15,19 +15,28 @@ namespace dnm
 {
 namespace
 {
-    struct LightBuffer
+    struct LightConstants
+    {
+        int   lightCount;
+        int   specularPow;
+        float smoothstepMax;
+        float ambientStrength;
+        float specularStrength;
+    };
+
+    struct PerLightBuffer
     {
         v3    lightColor;
-        float ambientStrength;
+        float padding = 0.0f;
         v3    lightPos;
-        float specularStrength;
-        v3    lightDirection;
+        float padding2 = 0.0f;
     };
 
     constexpr std::string_view vertexShader   = "Shaders/World.vert";
     constexpr std::string_view fragmentShader = "Shaders/World.frag";
 
-    constexpr std::string_view lightBindingPoint = "lightBuffer";
+    constexpr std::string_view lightConstantsBindingPoint = "lightConstants";
+    constexpr std::string_view perLightBindingPoint       = "perLightBuffer";
 
 }   // namespace
 
@@ -135,9 +144,15 @@ ForwardRenderingNode::ForwardRenderingNode(Config* config, Renderer* renderer, S
 
     m_renderingProfilerContext = GPUProfilerContext(m_renderer);
 
-    m_lightBuffer = m_renderer->createBuffer(
-      sizeof(LightBuffer),
+    m_lightConstants = m_renderer->createBuffer(
+      sizeof(LightConstants),
       vk::BufferUsageFlagBits::eUniformBuffer,
+      "Light Constants",
+      vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
+
+    m_perLightBuffer = m_renderer->createBuffer(
+      sizeof(PerLightBuffer) * 3,
+      vk::BufferUsageFlagBits::eStorageBuffer,
       "Light Buffer",
       vk::MemoryPropertyFlagBits::eDeviceLocal | vk::MemoryPropertyFlagBits::eHostVisible);
 
@@ -161,8 +176,14 @@ IRenderingNode::ExecutionResult ForwardRenderingNode::execute(const ExecutionDat
     const auto extent = m_renderer->getExtent();
 
     if (m_config->updateLight) {
-        LightBuffer buffer {m_config->lightColor, m_config->ambientStrength, m_config->lightPosition, m_config->specularStrength};
-        copyToDevice(m_lightBuffer.deviceMemory, std::span<const LightBuffer> {&buffer, 1u});
+        std::array buffer {
+          PerLightBuffer { m_config->lightColor, 0.0f,  m_config->lightPosition},
+          PerLightBuffer {m_config->lightColor2, 0.0f, m_config->lightPosition2},
+          PerLightBuffer {m_config->lightColor3, 0.0f, m_config->lightPosition3}
+        };
+        copyToDevice(m_perLightBuffer.deviceMemory, std::span<const PerLightBuffer> {buffer.data(), 3u});
+        LightConstants constants {m_config->lightCount, m_config->specularPow, m_config->smoothstepMax, m_config->ambientStrength, m_config->specularStrength};
+        copyToDevice(m_lightConstants.deviceMemory, std::span<const LightConstants> {&constants, 1u});
         m_config->updateLight = false;
     }
 
@@ -240,11 +261,12 @@ void ForwardRenderingNode::recreatePipeline() {
     assert(transform);
 
     std::array update {
-      DescriptorSlotUpdate {projectionBufferBindingPoint, *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {      viewBufferBindingPoint,           *viewBuffer, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {       transformBindingPoint,            *transform, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {       blockTypeBindingPoint,            *blockType, VK_WHOLE_SIZE, nullptr},
-      DescriptorSlotUpdate {           lightBindingPoint,  m_lightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {projectionBufferBindingPoint,   *projectionClipBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {      viewBufferBindingPoint,             *viewBuffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       transformBindingPoint,              *transform, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {       blockTypeBindingPoint,              *blockType, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {  lightConstantsBindingPoint, m_lightConstants.buffer, VK_WHOLE_SIZE, nullptr},
+      DescriptorSlotUpdate {        perLightBindingPoint, m_perLightBuffer.buffer, VK_WHOLE_SIZE, nullptr},
     };
 
     std::array textureUpdate {

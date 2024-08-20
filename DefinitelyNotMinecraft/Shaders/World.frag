@@ -4,13 +4,24 @@
 
 #include "Shaders/CameraBuffer.glsl"
 
-layout (std140, binding = ) uniform lightBuffer
+layout (std140, binding = ) uniform lightConstants
+{
+  int lightCount;
+  int specularPow;
+  float smoothstepMax;
+  float ambientStrength;
+  float specularStrength;
+};
+
+struct PerLightData
 {
   vec3 lightColor;  
-  float ambientStrength;
   vec3 lightPosition;
-  float specularStrength;
+};
 
+layout (std140, binding = ) buffer perLightBuffer
+{
+  PerLightData perLightData[];
 };
 
 layout (binding = ) uniform sampler2D tex;
@@ -24,19 +35,30 @@ layout (location = 0) out vec4 outColor;
 
 void main()
 {
-    vec3 lightDir = lightPosition - inWSPos;
-    vec3 lightDirNormalized = normalize(lightDir);  
+
+    vec3 finalResult = vec3(0);
+
+    for(int i = 0; i < lightCount; ++i)
+    {
+        vec3 lightDir = perLightData[i].lightPosition - inWSPos;
+        vec3 lightDirNormalized = normalize(lightDir);  
+        
+        float diff = max(dot(inNormal, lightDirNormalized), 0.0);
+        diff = diff * (1.0f - smoothstep(0.0f, 200.0f, length(lightDir)));
       
-    vec3 ambient = ambientStrength * lightColor;
+        vec3 viewDirection = normalize(cameraPos.xyz - inWSPos);
+        vec3 reflectDirection = reflect(-lightDirNormalized, inNormal);
+        float spec = pow(max(dot(viewDirection, reflectDirection), 0.0f), specularPow);
 
-    float diff = max(dot(inNormal, lightDirNormalized), 0.0);
-    diff = diff * (1.0f - smoothstep(0.0f, 200.0f, length(lightDir)));
-    vec3 diffuse = diff * lightColor;
+        vec3 ambient = ambientStrength * perLightData[i].lightColor;
+        vec3 diffuse = diff * perLightData[i].lightColor;
+        vec3 specular = specularStrength * spec * perLightData[i].lightColor;  
 
-    vec3 viewDirection = normalize(cameraPos.xyz - inWSPos);
-    vec3 reflectDirection = reflect(-lightDirNormalized, inNormal);
-    float spec = pow(max(dot(viewDirection, reflectDirection), 0.0f), 16);
-    vec3 specular = specularStrength * spec * lightColor;  
+        finalResult += ambient + diffuse + specular;
+    }
 
-    outColor = vec4((ambient + diffuse + specular) * (texture(tex, inTexCoord)).xyz, 1.0f);
+    finalResult /= lightCount;
+
+
+    outColor = vec4(finalResult * (texture(tex, inTexCoord)).xyz, 1.0f);
 }
