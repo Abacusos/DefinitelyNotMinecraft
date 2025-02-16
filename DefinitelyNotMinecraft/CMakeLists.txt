@@ -14,7 +14,7 @@ target_link_libraries(DefinitelyNotMinecraft PRIVATE stb)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE perlinnoise)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE imgui)
 target_link_libraries(DefinitelyNotMinecraft PRIVATE TracyClient)
- 
+
 add_definitions(-DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR)
 
 foreach(Library IN LISTS VULKAN_LIB_LIST)
