@@ -22,9 +22,9 @@ struct Config
 
     int   lightCount       = 3;
     int   specularPow      = 16;
-    float smoothstepMax    = 200.0f;
-    float ambientStrength  = 0.1f;
-    float specularStrength = 0.5f;
+    float smoothstepMax    = 0.001f;
+    float ambientStrength  = 0.0000f;
+    float specularStrength = 0.0001f;
 
     v3 lightColor {1.0f, 0.0f, 0.0f};
     v3 lightPosition {400.0f, 170.0f, 500.0f};
