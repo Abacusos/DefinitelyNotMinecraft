@@ -6,7 +6,7 @@
 
 namespace dnm
 {
-vk::raii::DeviceMemory dnm::allocateDeviceMemory(
+vk::raii::DeviceMemory allocateDeviceMemory(
   const vk::raii::Device&                   device,
   const vk::PhysicalDeviceMemoryProperties& memoryProperties,
   const vk::MemoryRequirements&             memoryRequirements,
@@ -16,7 +16,7 @@ vk::raii::DeviceMemory dnm::allocateDeviceMemory(
     return vk::raii::DeviceMemory(device, memoryAllocateInfo);
 }
 
-WindowData dnm::createWindow(const std::string& windowName, const vk::Extent2D& extent) {
+WindowData createWindow(const std::string& windowName, const vk::Extent2D& extent) {
     struct glfwContext
     {
         glfwContext() {
@@ -40,7 +40,7 @@ WindowData dnm::createWindow(const std::string& windowName, const vk::Extent2D& 
     return WindowData(window, windowName, extent);
 }
 
-u32 dnm::findGraphicsQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamilyProperties) {
+u32 findGraphicsQueueFamilyIndex(const std::vector<vk::QueueFamilyProperties>& queueFamilyProperties) {
     // get the first index into queueFamiliyProperties which supports graphics
     const std::vector<vk::QueueFamilyProperties>::const_iterator graphicsQueueFamilyProperty = std::find_if(
       queueFamilyProperties.begin(),
@@ -50,7 +50,7 @@ u32 dnm::findGraphicsQueueFamilyIndex(const std::vector<vk::QueueFamilyPropertie
     return static_cast<u32>(std::distance(queueFamilyProperties.begin(), graphicsQueueFamilyProperty));
 }
 
-std::pair<u32, u32> dnm::findGraphicsAndPresentQueueFamilyIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface) {
+std::pair<u32, u32> findGraphicsAndPresentQueueFamilyIndex(const vk::raii::PhysicalDevice& physicalDevice, const vk::raii::SurfaceKHR& surface) {
     const std::vector<vk::QueueFamilyProperties> queueFamilyProperties = physicalDevice.getQueueFamilyProperties();
     assert(queueFamilyProperties.size() < std::numeric_limits<u32>::max());
 
@@ -124,7 +124,7 @@ vk::raii::Pipeline makeComputePipeline(
     return vk::raii::Pipeline(device, pipelineCache, computeCreateInfo);
 }
 
-std::vector<const char*> dnm::gatherExtensions(
+std::vector<const char*> gatherExtensions(
   const std::vector<std::string>& extensions
 #if !defined(NDEBUG)
   ,
@@ -153,7 +153,7 @@ std::vector<const char*> dnm::gatherExtensions(
     return enabledExtensions;
 }
 
-std::vector<const char*> dnm::gatherLayers(
+std::vector<const char*> gatherLayers(
   const std::vector<std::string>& layers
 #if !defined(NDEBUG)
   ,
@@ -183,11 +183,11 @@ std::vector<const char*> dnm::gatherLayers(
     return enabledLayers;
 }
 
-std::vector<std::string> dnm::getDeviceExtensions() {
+std::vector<std::string> getDeviceExtensions() {
     return {VK_KHR_SWAPCHAIN_EXTENSION_NAME, VK_EXT_HOST_QUERY_RESET_EXTENSION_NAME, VK_EXT_CALIBRATED_TIMESTAMPS_EXTENSION_NAME};
 }
 
-std::vector<std::string> dnm::getInstanceExtensions() {
+std::vector<std::string> getInstanceExtensions() {
     std::vector<std::string> extensions;
     extensions.push_back(VK_KHR_SURFACE_EXTENSION_NAME);
 #if !defined(NDEBUG)
@@ -199,12 +199,12 @@ std::vector<std::string> dnm::getInstanceExtensions() {
     return extensions;
 }
 
-vk::raii::CommandBuffer dnm::makeCommandBuffer(const vk::raii::Device& device, const vk::raii::CommandPool& commandPool) {
+vk::raii::CommandBuffer makeCommandBuffer(const vk::raii::Device& device, const vk::raii::CommandPool& commandPool) {
     const vk::CommandBufferAllocateInfo commandBufferAllocateInfo(*commandPool, vk::CommandBufferLevel::ePrimary, 1);
     return std::move(vk::raii::CommandBuffers(device, commandBufferAllocateInfo).front());
 }
 
-vk::raii::DescriptorPool dnm::makeDescriptorPool(const vk::raii::Device& device, std::span<const vk::DescriptorPoolSize> poolSizes) {
+vk::raii::DescriptorPool makeDescriptorPool(const vk::raii::Device& device, std::span<const vk::DescriptorPoolSize> poolSizes) {
     assert(!poolSizes.empty());
     const u32 maxSets =
       std::accumulate(poolSizes.begin(), poolSizes.end(), 0, [](u32 sum, const vk::DescriptorPoolSize& dps) { return sum + dps.descriptorCount; });
@@ -240,7 +240,7 @@ vk::raii::DescriptorSetLayout makeDescriptorSetLayout(
     return {device, descriptorSetLayoutCreateInfo};
 }
 
-vk::raii::Device dnm::makeDevice(
+vk::raii::Device makeDevice(
   const vk::raii::PhysicalDevice&   physicalDevice,
   u32                               queueFamilyIndex,
   const std::vector<std::string>&   extensions,
@@ -258,7 +258,7 @@ vk::raii::Device dnm::makeDevice(
     return vk::raii::Device(physicalDevice, deviceCreateInfo);
 }
 
-std::vector<vk::raii::Framebuffer> dnm::makeFramebuffers(
+std::vector<vk::raii::Framebuffer> makeFramebuffers(
   const vk::raii::Device&                 device,
   vk::raii::RenderPass&                   renderPass,
   const std::vector<vk::raii::ImageView>& imageViews,
@@ -279,7 +279,7 @@ std::vector<vk::raii::Framebuffer> dnm::makeFramebuffers(
     return framebuffers;
 }
 
-vk::raii::Pipeline dnm::makeGraphicsPipeline(
+vk::raii::Pipeline makeGraphicsPipeline(
   const Config*                                  config,
   const vk::raii::Device&                        device,
   const vk::raii::PipelineCache&                 pipelineCache,
@@ -366,7 +366,7 @@ vk::raii::Pipeline dnm::makeGraphicsPipeline(
     return vk::raii::Pipeline(device, pipelineCache, graphicsPipelineCreateInfo);
 }
 
-vk::raii::Image dnm::makeImage(const vk::raii::Device& device) {
+vk::raii::Image makeImage(const vk::raii::Device& device) {
     const vk::ImageCreateInfo imageCreateInfo(
       {},
       vk::ImageType::e2D,
@@ -380,7 +380,7 @@ vk::raii::Image dnm::makeImage(const vk::raii::Device& device) {
     return vk::raii::Image(device, imageCreateInfo);
 }
 
-vk::raii::Instance dnm::makeInstance(
+vk::raii::Instance makeInstance(
   const vk::raii::Context&        context,
   const std::string&              appName,
   const std::string&              engineName,
@@ -419,7 +419,7 @@ vk::raii::Instance dnm::makeInstance(
     return vk::raii::Instance(context, instanceCreateInfo.get<vk::InstanceCreateInfo>());
 }
 
-vk::raii::RenderPass dnm::makeRenderPass(
+vk::raii::RenderPass makeRenderPass(
   const vk::raii::Device& device,
   vk::Format              colorFormat,
   vk::Format              depthFormat,
@@ -471,7 +471,7 @@ vk::raii::RenderPass dnm::makeRenderPass(
     return vk::raii::RenderPass(device, renderPassCreateInfo);
 }
 
-vk::Format dnm::pickDepthFormat(const vk::raii::PhysicalDevice& physicalDevice) {
+vk::Format pickDepthFormat(const vk::raii::PhysicalDevice& physicalDevice) {
     const std::vector<vk::Format> candidates = {vk::Format::eD32Sfloat, vk::Format::eD32SfloatS8Uint, vk::Format::eD24UnormS8Uint};
     for (const vk::Format format : candidates) {
         vk::FormatProperties props = physicalDevice.getFormatProperties(format);
@@ -483,7 +483,7 @@ vk::Format dnm::pickDepthFormat(const vk::raii::PhysicalDevice& physicalDevice) 
     throw std::runtime_error("failed to find supported format!");
 }
 
-vk::PresentModeKHR dnm::pickPresentMode(const std::vector<vk::PresentModeKHR>& presentModes) {
+vk::PresentModeKHR pickPresentMode(const std::vector<vk::PresentModeKHR>& presentModes) {
     vk::PresentModeKHR pickedMode = vk::PresentModeKHR::eFifo;
     for (const auto& presentMode : presentModes) {
         if (presentMode == vk::PresentModeKHR::eMailbox) {
@@ -498,7 +498,7 @@ vk::PresentModeKHR dnm::pickPresentMode(const std::vector<vk::PresentModeKHR>& p
     return pickedMode;
 }
 
-vk::SurfaceFormatKHR dnm::pickSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
+vk::SurfaceFormatKHR pickSurfaceFormat(const std::vector<vk::SurfaceFormatKHR>& formats) {
     assert(!formats.empty());
     vk::SurfaceFormatKHR pickedFormat = formats [0];
     if (formats.size() == 1) {
@@ -528,7 +528,7 @@ vk::SurfaceFormatKHR dnm::pickSurfaceFormat(const std::vector<vk::SurfaceFormatK
     return pickedFormat;
 }
 
-void dnm::setImageLayout(
+void setImageLayout(
   const vk::raii::CommandBuffer& commandBuffer,
   vk::Image                      image,
   vk::Format                     format,
@@ -636,14 +636,14 @@ void dnm::setImageLayout(
     return commandBuffer.pipelineBarrier(sourceStage, destinationStage, {}, nullptr, nullptr, imageMemoryBarrier);
 }
 
-void dnm::submitAndWait(const vk::raii::Device& device, const vk::raii::Queue& queue, const vk::raii::CommandBuffer& commandBuffer) {
+void submitAndWait(const vk::raii::Device& device, const vk::raii::Queue& queue, const vk::raii::CommandBuffer& commandBuffer) {
     const vk::raii::Fence fence(device, vk::FenceCreateInfo());
     queue.submit(vk::SubmitInfo(nullptr, nullptr, *commandBuffer), *fence);
     while (vk::Result::eTimeout == device.waitForFences({*fence}, VK_TRUE, FenceTimeout))
         ;
 }
 
-void dnm::updateDescriptorSets(
+void updateDescriptorSets(
   const vk::raii::Device&                                                                                         device,
   const vk::raii::DescriptorSet&                                                                                  descriptorSet,
   std::span<std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*>> bufferData,
@@ -671,7 +671,7 @@ void dnm::updateDescriptorSets(
     device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-void dnm::updateDescriptorSets(
+void updateDescriptorSets(
   const vk::raii::Device&                                                                                         device,
   const vk::raii::DescriptorSet&                                                                                  descriptorSet,
   std::span<std::tuple<vk::DescriptorType, const vk::raii::Buffer&, vk::DeviceSize, const vk::raii::BufferView*>> bufferData,
@@ -703,7 +703,7 @@ void dnm::updateDescriptorSets(
           *descriptorSet,
           dstBinding,
           0,
-          dnm::checked_cast<u32>(imageInfos.size()),
+          checked_cast<u32>(imageInfos.size()),
           vk::DescriptorType::eCombinedImageSampler,
           imageInfos.data(),
           nullptr,
@@ -785,7 +785,7 @@ void updateDescriptorSets(
     device.updateDescriptorSets(writeDescriptorSets, nullptr);
 }
 
-VKAPI_ATTR VkBool32 VKAPI_CALL dnm::debugUtilsMessengerCallback(
+VKAPI_ATTR VkBool32 VKAPI_CALL debugUtilsMessengerCallback(
   VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
   VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
   const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
@@ -832,7 +832,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL dnm::debugUtilsMessengerCallback(
     return VK_TRUE;
 }
 
-vk::DebugUtilsMessengerCreateInfoEXT dnm::makeDebugUtilsMessengerCreateInfoEXT() {
+vk::DebugUtilsMessengerCreateInfoEXT makeDebugUtilsMessengerCreateInfoEXT() {
     return {
       {},
       vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
