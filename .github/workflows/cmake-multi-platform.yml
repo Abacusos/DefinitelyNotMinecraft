@@ -51,7 +51,7 @@ jobs:
     - name: Setup Vulkan SDK # action name
       uses: SpargatGroup/setup-vulkan-sdk@v1.1.0
       with:
-          version: '1.3.204.0'  
+          version: '1.4.321.1'  
           components: 'Vulkan-Headers,Vulkan-Loader,shaderc' 
           cache: 'true'
 
