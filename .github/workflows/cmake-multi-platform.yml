@@ -40,12 +40,6 @@ jobs:
     - uses: seanmiddleditch/gha-setup-ninja@master
     # MSVC lookup support
     - uses: ilammy/msvc-dev-cmd@v1
-  
-    - name: Check CMake version
-      run: |
-        echo $env:Path
-        cmake --version
-      shell: powershell
 
     - name: Set reusable strings
       # Turn repeated input strings (such as the build output directory) into step outputs. These step outputs can be used throughout the workflow file.
@@ -54,11 +48,11 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
-    - name: Check CMake version again
+    - name: Check CMake version
       run: |
         echo $env:Path
         cmake --version
-      shell: powershell
+      shell: bash      
 
     # windows
     - name: Setup Vulkan SDK # action name
@@ -72,12 +66,12 @@ jobs:
       run: |
         echo $env:Path
         cmake --version
-      shell: powershell
+      shell: bash
 
     - name: Configure CMake
       # Configure CMake in a 'build' subdirectory. `CMAKE_BUILD_TYPE` is only required if you are using a single-configuration generator such as make.
       # See https://cmake.org/cmake/help/latest/variable/CMAKE_BUILD_TYPE.html?highlight=cmake_build_type
-      shell: powershell
+      shell: bash
       run: |
         cmake --version
         cmake -B ${{ steps.strings.outputs.build-output-dir }} `
