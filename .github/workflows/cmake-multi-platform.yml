@@ -12,7 +12,7 @@ on:
       vulkanversion:
         description: 'Vulkan Version'
         required: false
-        default: '1.3.204.0'
+        default: '1.3.296.0'
       components:
         description: 'Vulkan SDK Components (comma-separated)'
         required: false
