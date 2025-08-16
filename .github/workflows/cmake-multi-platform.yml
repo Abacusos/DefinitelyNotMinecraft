@@ -54,6 +54,12 @@ jobs:
       run: |
         echo "build-output-dir=${{ github.workspace }}/build" >> "$GITHUB_OUTPUT"
 
+    - name: Check CMake version again
+      run: |
+        echo $env:Path
+        cmake --version
+      shell: powershell
+
     # windows
     - name: Setup Vulkan SDK # action name
       uses: SpargatGroup/setup-vulkan-sdk@v1.1.0
@@ -62,7 +68,7 @@ jobs:
         components: 'Vulkan-Headers,Vulkan-Loader,Shaderc'  # Vulkan components you need
         cache: 'true'  # Vulkan Cache
 
-    - name: Check CMake version again
+    - name: Check CMake version once more
       run: |
         echo $env:Path
         cmake --version
