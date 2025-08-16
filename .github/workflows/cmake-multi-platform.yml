@@ -63,8 +63,8 @@ jobs:
       if: runner.os == 'Windows'
       shell: pwsh
       run: |
-        $version = "${{ github.event.inputs.vulkanversion }}"
-        $components = "${{ github.event.inputs.components }}"
+        $version = '${{ github.event.inputs.vulkanversion }}'
+        $components = '${{ github.event.inputs.components }}'
         $installer = "VulkanSDK-$version-Installer.exe"
 
         Write-Host "Downloading Vulkan SDK version $version"
