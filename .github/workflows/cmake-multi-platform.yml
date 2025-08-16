@@ -42,7 +42,9 @@ jobs:
     - uses: ilammy/msvc-dev-cmd@v1
   
     - name: Check CMake version
-      run: cmake --version
+      run: |
+        echo $env:Path
+        cmake --version
       shell: powershell
 
     - name: Set reusable strings
@@ -61,7 +63,9 @@ jobs:
         cache: 'true'  # Vulkan Cache
 
     - name: Check CMake version again
-      run: cmake --version
+      run: |
+        echo $env:Path
+        cmake --version
       shell: powershell
 
     - name: Configure CMake
